@@ -1,0 +1,28 @@
+{
+  "auth": "zef:FCO",
+  "authors": [
+    "Fernando Correa de Oliveira"
+  ],
+  "build-depends": [
+  ],
+  "depends": [
+  ],
+  "description": "a browser-based Raku playground (Rakudo compiled to JavaScript)",
+  "license": "Artistic-2.0",
+  "name": "Raku::Playground",
+  "perl": "6.d",
+  "provides": {
+    "Raku::Playground": "lib/Raku/Playground.rakumod"
+  },
+  "resources": [
+  ],
+  "source-url": "",
+  "tags": [
+    "playground",
+    "browser",
+    "javascript"
+  ],
+  "test-depends": [
+  ],
+  "version": "0.0.1"
+}

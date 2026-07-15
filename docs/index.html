@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Raku Playground</title>
+<link rel="stylesheet" href="style.css">
+<script type="module" src="playground.js"></script>
+</head>
+<body>
+<header>
+    <h1>🦋 Raku Playground</h1>
+    <div class="controls">
+        <select id="level" title="Choose a level"></select>
+        <span id="status" class="status loading">Loading Raku runtime (~77 MB), this takes a while…</span>
+        <select id="speed" title="Playback speed">
+            <option value="800">🐢 Slow</option>
+            <option value="400" selected>▶ Normal</option>
+            <option value="80">⏩ Fastest</option>
+        </select>
+        <button id="run" disabled title="Ctrl/Cmd-Enter">Loading…</button>
+        <button id="step" disabled title="Step through your code one command at a time">Step</button>
+        <button id="clear">Clear output</button>
+        <button id="example" title="Load a DOM-rendering example into the editor">Example: DOM</button>
+    </div>
+</header>
+<main>
+    <div id="left">
+        <aside id="instructions">
+            <h2 id="lvl-name"></h2>
+            <p id="lvl-goal"></p>
+            <ol id="lvl-steps"></ol>
+            <div id="lvl-explain"></div>
+            <button id="hint-btn" hidden>Hint</button>
+            <p id="lvl-hint" hidden></p>
+        </aside>
+        <div id="editor"></div>
+    </div>
+    <div id="right">
+        <div id="world" hidden></div>
+        <div id="preview"></div>
+        <pre id="output" aria-live="polite"></pre>
+    </div>
+</main>
+</body>
+</html>

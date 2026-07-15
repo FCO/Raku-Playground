@@ -1,0 +1,4 @@
+.precomp/
+/Raku-Playground-*
+node_modules/
+/dist/

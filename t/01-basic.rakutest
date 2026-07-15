@@ -1,0 +1,6 @@
+use Test;
+use Raku::Playground;
+
+pass "replace me";
+
+done-testing;

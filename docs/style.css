@@ -1,0 +1,544 @@
+* { box-sizing: border-box; }
+
+[hidden] { display: none !important; }
+
+html, body {
+    margin: 0;
+    height: 100%;
+    font-family: system-ui, sans-serif;
+    background: #1e1e2e;
+    color: #cdd6f4;
+}
+
+body {
+    display: flex;
+    flex-direction: column;
+}
+
+header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    padding: 0.5rem 1rem;
+    background: #181825;
+    border-bottom: 1px solid #313244;
+    flex-wrap: wrap;
+}
+
+header h1 {
+    margin: 0;
+    font-size: 1.1rem;
+}
+
+.controls {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    flex-wrap: wrap;
+}
+
+.status {
+    font-size: 0.85rem;
+    opacity: 0.8;
+}
+
+.status.loading::after {
+    content: "";
+    display: inline-block;
+    width: 0.8em;
+    height: 0.8em;
+    margin-left: 0.5em;
+    vertical-align: -0.1em;
+    border: 2px solid #cdd6f4;
+    border-top-color: transparent;
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin { to { transform: rotate(360deg); } }
+
+.status.ready { color: #a6e3a1; }
+.status.running { color: #f9e2af; }
+.status.error { color: #f38ba8; }
+
+button, select {
+    font: inherit;
+    padding: 0.3rem 1rem;
+    border: 1px solid #45475a;
+    border-radius: 6px;
+    background: #313244;
+    color: #cdd6f4;
+    cursor: pointer;
+}
+
+select { padding: 0.3rem 0.5rem; }
+
+button:hover:not(:disabled) { background: #45475a; }
+button:disabled { opacity: 0.5; cursor: not-allowed; }
+
+#run:not(:disabled) {
+    background: #a6e3a1;
+    border-color: #a6e3a1;
+    color: #1e1e2e;
+    font-weight: 600;
+}
+
+main {
+    flex: 1;
+    display: flex;
+    min-height: 0;
+}
+
+#left {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    border-right: 1px solid #313244;
+}
+
+/* ---------- instructions panel ---------- */
+
+#instructions {
+    padding: 0.75rem 1rem;
+    background: #181825;
+    border-bottom: 1px solid #313244;
+    font-size: 0.9rem;
+    max-height: 40%;
+    overflow: auto;
+}
+
+#instructions h2 {
+    margin: 0 0 0.4rem;
+    font-size: 1rem;
+}
+
+#lvl-goal { margin: 0 0 0.4rem; }
+#lvl-goal::before { content: "Goal: "; font-weight: 700; color: #fab387; }
+
+#lvl-steps { margin: 0 0 0.4rem; padding-left: 1.4rem; }
+#lvl-steps li { margin: 0.15rem 0; }
+
+#lvl-explain p {
+    margin: 0.45rem 0;
+    color: #bac2de;
+    line-height: 1.45;
+}
+
+#lvl-explain code, #lvl-goal code, #lvl-steps code {
+    background: #313244;
+    border-radius: 4px;
+    padding: 0.05rem 0.3rem;
+    font-family: ui-monospace, "SF Mono", Menlo, monospace;
+    font-size: 0.85em;
+    color: #89dceb;
+}
+
+#hint-btn { padding: 0.15rem 0.75rem; font-size: 0.85rem; }
+#lvl-hint {
+    margin: 0.4rem 0 0;
+    padding: 0.4rem 0.6rem;
+    background: #313244;
+    border-radius: 6px;
+    font-family: ui-monospace, "SF Mono", Menlo, monospace;
+    font-size: 0.85rem;
+    color: #f9e2af;
+}
+
+#editor {
+    flex: 1;
+    min-height: 0;
+    overflow: auto;
+}
+
+#editor .cm-editor { height: 100%; font-size: 14px; }
+#editor .cm-editor.cm-focused { outline: none; }
+
+#right {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+}
+
+#preview {
+    flex: 1;
+    min-height: 0;
+    overflow: auto;
+    padding: 1rem;
+    background: #fdfdfd;
+    color: #222;
+    border-bottom: 1px solid #313244;
+}
+
+#preview:empty::before {
+    content: "Preview — Raku code can render here:\A my \\preview = EVAL :lang<JavaScript>, 'return PREVIEW';";
+    white-space: pre-wrap;
+    color: #999;
+    font-family: ui-monospace, "SF Mono", Menlo, monospace;
+    font-size: 12px;
+}
+
+#output {
+    flex: 1;
+    min-height: 0;
+    margin: 0;
+    padding: 0.75rem 1rem;
+    overflow: auto;
+    font-family: ui-monospace, "SF Mono", Menlo, monospace;
+    font-size: 13px;
+    white-space: pre-wrap;
+    word-break: break-word;
+    background: #11111b;
+}
+
+#output .stderr { color: #f38ba8; }
+
+#output .run-separator {
+    display: block;
+    color: #6c7086;
+    border-top: 1px solid #313244;
+    margin-top: 0.5em;
+    padding-top: 0.5em;
+}
+
+#output .run-separator:first-child {
+    border-top: none;
+    margin-top: 0;
+    padding-top: 0;
+}
+
+/* ---------- puzzle world ---------- */
+
+#world {
+    --rotX: 55deg;
+    --rotZ: 45deg;
+    flex: 1.4;
+    min-height: 0;
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    background: linear-gradient(#8ec9f0, #cfeafe 70%);
+    border-bottom: 1px solid #313244;
+    overflow: hidden;
+    cursor: grab;
+    touch-action: none;
+    user-select: none;
+}
+
+#world:active { cursor: grabbing; }
+
+#world .hud {
+    position: absolute;
+    top: 0.6rem;
+    left: 0.8rem;
+    z-index: 2;
+    padding: 0.25rem 0.8rem;
+    background: rgba(90, 62, 27, 0.9);
+    border: 2px solid #7a5230;
+    border-radius: 8px;
+    color: #ffe9c9;
+    font-weight: 700;
+}
+
+#world .scene {
+    flex: 1;
+    display: grid;
+    place-items: center;
+    perspective: 1100px;
+}
+
+#world .board {
+    position: relative;
+    transform-style: preserve-3d;
+    transform: rotateX(var(--rotX)) rotateZ(var(--rotZ));
+}
+
+#world .tile {
+    position: absolute;
+    width: 64px;
+    height: 64px;
+    border-radius: 5px;
+}
+
+#world .tile.path, #world .tile.rock {
+    background: linear-gradient(135deg, #e2c494, #c9a468);
+    border: 1px solid #b08d55;
+    box-shadow: 6px 6px 0 #8a6a3d, inset 0 0 0 3px rgba(255, 255, 255, 0.18);
+}
+
+#world .tile.water {
+    background: repeating-linear-gradient(120deg, #3f9be0 0 14px, #58aae8 14px 28px);
+    background-size: 200% 200%;
+    border: 1px solid #3a8fd0;
+    border-radius: 0;
+    transform: translateZ(-12px);
+    opacity: 0.95;
+    animation: waves 5s linear infinite;
+}
+
+@keyframes waves {
+    to { background-position: 56px 0; }
+}
+
+#world .tile.void { visibility: hidden; }
+
+#world .sprite, #world .camelia, #world .facing-arrow {
+    position: absolute;
+    width: 64px;
+    height: 64px;
+    display: grid;
+    place-items: center;
+    pointer-events: none;
+    transform-style: preserve-3d;
+}
+
+/* stand sprites up to face the camera (inverse of the board rotation) */
+#world .upright {
+    display: inline-block;
+    transform: rotateZ(calc(var(--rotZ) * -1)) rotateX(calc(var(--rotX) * -1)) translateY(-8px);
+    transform-style: preserve-3d;
+    font-size: 28px;
+}
+
+#world .gem .upright {
+    filter: drop-shadow(0 3px 3px rgba(0, 40, 90, 0.35));
+    animation: bob 1.6s ease-in-out infinite;
+}
+
+@keyframes bob {
+    0%, 100% { transform: rotateZ(calc(var(--rotZ) * -1)) rotateX(calc(var(--rotX) * -1)) translateY(-8px); }
+    50%      { transform: rotateZ(calc(var(--rotZ) * -1)) rotateX(calc(var(--rotX) * -1)) translateY(-16px); }
+}
+
+#world .gem.collected .upright {
+    animation: sparkle 0.5s ease-out forwards;
+}
+
+@keyframes sparkle {
+    to { transform: rotateZ(calc(var(--rotZ) * -1)) rotateX(calc(var(--rotX) * -1)) translateY(-44px) scale(2); opacity: 0; }
+}
+
+#world .camelia { z-index: 2; }
+
+/* soft shadow on the board plane, under the flying butterfly */
+#world .camelia::before {
+    content: "";
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    width: 34px;
+    height: 34px;
+    margin: -17px 0 0 -17px;
+    border-radius: 50%;
+    background: radial-gradient(circle, rgba(20, 30, 60, 0.35), transparent 65%);
+}
+
+#world .camelia .fx {
+    display: inline-block;
+    transform-style: preserve-3d;
+}
+
+/* ---- Camelia, in CSS: striped body, round head, four flapping wings ---- */
+
+#world .butterfly {
+    position: relative;
+    display: block;
+    width: 56px;
+    height: 48px;
+    transform-style: preserve-3d;
+    animation: hover-bob 1.2s ease-in-out infinite;
+}
+
+@keyframes hover-bob {
+    0%, 100% { transform: translateY(0); }
+    50%      { transform: translateY(-5px); }
+}
+
+#world .wing {
+    position: absolute;
+}
+
+/* big black forewings: blue swirl with red core, green swoosh — like the logo */
+#world .wing.fore {
+    top: 0;
+    width: 27px;
+    height: 29px;
+    background:
+        radial-gradient(circle at 48% 38%, #e3173d 0 3.5px, transparent 4px),
+        radial-gradient(circle at 48% 38%, transparent 0 5px, #1f31e8 5.5px 11px, transparent 11.5px),
+        radial-gradient(ellipse 40% 12% at 42% 82%, #1fc637 0 99%, transparent 100%),
+        #0a0a0a;
+}
+
+/* smaller black hindwings: pink ellipse with darker red core */
+#world .wing.hind {
+    top: 26px;
+    width: 20px;
+    height: 18px;
+    background:
+        radial-gradient(ellipse 26% 20% at 50% 54%, #b3123a 0 99%, transparent 100%),
+        radial-gradient(ellipse 54% 42% at 50% 54%, #ff2d78 0 99%, transparent 100%),
+        #0a0a0a;
+}
+
+#world .wing.fore.left {
+    right: 50%;
+    margin-right: 2px;
+    border-radius: 85% 25% 30% 65% / 70% 35% 45% 55%;
+    transform-origin: right center;
+    animation: flap-left 0.45s ease-in-out infinite;
+}
+
+#world .wing.fore.right {
+    left: 50%;
+    margin-left: 2px;
+    border-radius: 25% 85% 65% 30% / 35% 70% 55% 45%;
+    transform-origin: left center;
+    animation: flap-right 0.45s ease-in-out infinite;
+}
+
+#world .wing.hind.left {
+    right: 50%;
+    margin-right: 2px;
+    border-radius: 70% 30% 45% 75% / 55% 40% 60% 60%;
+    transform-origin: right top;
+    animation: flap-left 0.45s ease-in-out infinite;
+}
+
+#world .wing.hind.right {
+    left: 50%;
+    margin-left: 2px;
+    border-radius: 30% 70% 75% 45% / 40% 55% 60% 60%;
+    transform-origin: left top;
+    animation: flap-right 0.45s ease-in-out infinite;
+}
+
+@keyframes flap-left {
+    0%, 100% { transform: rotateY(45deg); }
+    50%      { transform: rotateY(-10deg); }
+}
+
+@keyframes flap-right {
+    0%, 100% { transform: rotateY(-45deg); }
+    50%      { transform: rotateY(10deg); }
+}
+
+/* antennae anchor (the "body" of the logo is really the face) */
+#world .bfly-body {
+    position: absolute;
+    left: 50%;
+    top: 8px;
+    width: 0;
+    height: 0;
+}
+
+#world .bfly-body::before, #world .bfly-body::after {
+    content: "";
+    position: absolute;
+    top: 0;
+    width: 8px;
+    height: 10px;
+    border-top: 1.6px solid #0a0a0a;
+    border-radius: 50%;
+}
+
+#world .bfly-body::before { left: -9px; top: 4px; transform: rotate(-35deg); }
+#world .bfly-body::after { left: 1px; top: 4px; transform: rotate(35deg); }
+
+/* Camelia's yellow face: big white eyes and a red smile */
+#world .bfly-head {
+    position: absolute;
+    left: 50%;
+    top: 17px;
+    width: 20px;
+    height: 18px;
+    margin-left: -10px;
+    transform: translateZ(5px);  /* the face sits in front of the flapping wings */
+    border-radius: 50% 50% 48% 48% / 55% 55% 45% 45%;
+    background:
+        radial-gradient(circle at 30% 36%, #0a0a0a 0 1.8px, #fff 2.2px 4.2px, transparent 4.7px),
+        radial-gradient(circle at 70% 36%, #0a0a0a 0 1.8px, #fff 2.2px 4.2px, transparent 4.7px),
+        #ffe93d;
+    border: 1.5px solid #0a0a0a;
+}
+
+/* the smile */
+#world .bfly-head::before {
+    content: "";
+    position: absolute;
+    left: 50%;
+    bottom: 2.5px;
+    width: 9px;
+    height: 5px;
+    margin-left: -4.5px;
+    border-bottom: 2px solid #e3173d;
+    border-radius: 0 0 50% 50% / 0 0 100% 100%;
+}
+
+#world .facing-arrow {
+    color: rgba(255, 255, 255, 0.95);
+    font-size: 16px;
+    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.5);
+}
+
+#world .camelia, #world .facing-arrow {
+    transition-property: left, top, transform;
+    transition-timing-function: ease-in-out;
+}
+
+#world .fx.bump { animation: bump 0.35s ease-in-out; }
+
+@keyframes bump {
+    0%, 100% { transform: translate(0, 0); }
+    40%      { transform: translate(var(--bx, 10px), var(--by, 0)); }
+}
+
+#world .fx.nothing { animation: nothing 0.4s ease-in-out; }
+
+@keyframes nothing {
+    0%, 100% { transform: rotate(0); }
+    25% { transform: rotate(-14deg); }
+    75% { transform: rotate(14deg); }
+}
+
+#world .camelia.fall {
+    transition: transform 0.7s ease-in, opacity 0.7s ease-in;
+    transform: translateZ(-56px) rotateZ(35deg);
+    opacity: 0;
+}
+
+#world .banner {
+    position: absolute;
+    left: 50%;
+    bottom: 1rem;
+    transform: translateX(-50%);
+    z-index: 2;
+    padding: 0.5rem 1.2rem;
+    border-radius: 10px;
+    font-weight: 700;
+    white-space: nowrap;
+}
+
+#world .banner.success { background: #a6e3a1; color: #14351a; }
+#world .banner.failure { background: #f38ba8; color: #40101f; }
+
+#world .banner .next-level {
+    margin-left: 0.6rem;
+    padding: 0.25rem 0.9rem;
+    border: none;
+    border-radius: 8px;
+    background: #14351a;
+    color: #a6e3a1;
+    font-weight: 700;
+    cursor: pointer;
+}
+
+#world .banner .next-level:hover { background: #1e4a26; }
+
+@media (max-width: 700px) {
+    main { flex-direction: column; }
+    #left { border-right: none; border-bottom: 1px solid #313244; }
+    #left, #right { flex: 1; }
+}
