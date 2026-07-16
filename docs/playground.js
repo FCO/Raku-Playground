@@ -301,6 +301,10 @@ const view = {
 function applyView() {
     worldEl.style.setProperty("--rotX", `${view.rx}deg`);
     worldEl.style.setProperty("--rotZ", `${view.rz}deg`);
+    // negated copies for the sprite counter-rotation: WebKit rejects
+    // calc() inside transform function arguments
+    worldEl.style.setProperty("--rotXneg", `${-view.rx}deg`);
+    worldEl.style.setProperty("--rotZneg", `${-view.rz}deg`);
     // Camelia's stare direction is a screen projection — recompute when the board turns
     world?.setHeading(world.arrowFacing, 0);
 }

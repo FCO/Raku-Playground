@@ -95,14 +95,17 @@ main {
     flex: 1;
     display: flex;
     min-height: 0;
+    overflow: hidden;
 }
 
 #left {
     flex: 1;
     min-width: 0;
+    min-height: 0;
     display: flex;
     flex-direction: column;
     border-right: 1px solid #313244;
+    overflow: hidden; /* a pane may never paint over its neighbors */
 }
 
 /* ---------- instructions panel ---------- */
@@ -165,8 +168,10 @@ main {
 #right {
     flex: 1;
     min-width: 0;
+    min-height: 0;
     display: flex;
     flex-direction: column;
+    overflow: hidden; /* a pane may never paint over its neighbors */
 }
 
 #preview {
@@ -221,6 +226,8 @@ main {
 #world {
     --rotX: 55deg;
     --rotZ: 45deg;
+    --rotXneg: -55deg;
+    --rotZneg: -45deg;
     flex: 1.4;
     min-height: 0;
     position: relative;
@@ -229,6 +236,7 @@ main {
     background: linear-gradient(#8ec9f0, #cfeafe 70%);
     border-bottom: 1px solid #313244;
     overflow: hidden;
+    clip-path: inset(0); /* WebKit: overflow alone doesn't clip 3D-transformed content */
     cursor: grab;
     touch-action: none;
     user-select: none;
@@ -296,8 +304,11 @@ main {
     position: absolute;
     width: 64px;
     height: 64px;
-    display: grid;
-    place-items: center;
+    /* centered via line-height/text-align, NOT grid/flex: WebKit ignores
+       transform-style: preserve-3d on grid and flex boxes, flattening the
+       billboarded sprites onto the board (they render "lying down") */
+    line-height: 64px;
+    text-align: center;
     pointer-events: none;
     transform-style: preserve-3d;
 }
@@ -305,7 +316,9 @@ main {
 /* stand sprites up to face the camera (inverse of the board rotation) */
 #world .upright {
     display: inline-block;
-    transform: rotateZ(calc(var(--rotZ) * -1)) rotateX(calc(var(--rotX) * -1)) translateY(-8px);
+    vertical-align: middle;
+    line-height: normal;
+    transform: rotateZ(var(--rotZneg)) rotateX(var(--rotXneg)) translateY(-8px);
     transform-style: preserve-3d;
     font-size: 28px;
 }
