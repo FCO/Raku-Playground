@@ -213,6 +213,20 @@ export class World {
         this.container.appendChild(this.banner);
 
         this.placeSprite(x, y, facing, 0);
+        this.fitBoard();
+    }
+
+    // Scale the board down (never up) so its projected footprint fits the
+    // scene — without this, phones show a clipped corner of the island.
+    fitBoard() {
+        const scene = this.board.parentElement;
+        this.board.style.setProperty("--scale", 1);
+        const bb = this.board.getBoundingClientRect(); // measured at scale 1
+        if (!bb.width || !scene.clientWidth) return;
+        const scale = Math.min(1,
+            (scene.clientWidth * 0.92) / bb.width,
+            (scene.clientHeight * 0.92) / bb.height);
+        this.board.style.setProperty("--scale", scale.toFixed(3));
     }
 
     upright(emoji, cls, gx, gy) {

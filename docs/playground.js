@@ -323,6 +323,8 @@ worldEl.addEventListener("pointerup", () => { dragFrom = null; });
 worldEl.addEventListener("pointercancel", () => { dragFrom = null; });
 applyView();
 
+window.addEventListener("resize", () => world?.fitBoard());
+
 // ---------- running ----------
 
 function evalUserCode() {

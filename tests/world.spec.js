@@ -85,6 +85,26 @@ test("Camelia's eyes stare where she is going (and she stays upright)", async ()
     expect(rotated).toBe(false);
 });
 
+test("board scales to fit a phone-sized screen", async () => {
+    await page.setViewportSize({ width: 390, height: 844 });
+    try {
+        await page.evaluate(() => window.__playground.setLevel("0"));
+        const { board, world } = await page.evaluate(() => ({
+            board: document.querySelector("#world .board").getBoundingClientRect().toJSON(),
+            world: document.getElementById("world").getBoundingClientRect().toJSON(),
+        }));
+        expect(board.width).toBeLessThanOrEqual(world.width);   // fits horizontally
+        expect(board.width).toBeGreaterThan(world.width * 0.5); // …but stays substantial
+        const scale = await page.$eval("#world .board", (el) =>
+            parseFloat(el.style.getPropertyValue("--scale")));
+        expect(scale).toBeLessThanOrEqual(1);
+        expect(scale).toBeGreaterThan(0.2);
+    } finally {
+        await page.setViewportSize({ width: 1400, height: 900 });
+        await page.evaluate(() => window.__playground.setLevel("0")); // re-fit at desktop size
+    }
+});
+
 test("step mode advances exactly one command per click", async () => {
     await page.evaluate(() => window.__playground.setLevel("0"));
     await page.evaluate(() => {

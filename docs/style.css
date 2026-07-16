@@ -252,7 +252,8 @@ main {
 #world .board {
     position: relative;
     transform-style: preserve-3d;
-    transform: rotateX(var(--rotX)) rotateZ(var(--rotZ));
+    /* --scale is set per-level by World.fitBoard() so the island fits the pane */
+    transform: scale(var(--scale, 1)) rotateX(var(--rotX)) rotateZ(var(--rotZ));
 }
 
 #world .tile {
@@ -563,6 +564,18 @@ main {
 
 @media (max-width: 700px) {
     main { flex-direction: column; }
-    #left { border-right: none; border-bottom: 1px solid #313244; }
-    #left, #right { flex: 1; }
+    /* compact header: the controls otherwise stack four rows tall */
+    header { padding: 0.3rem 0.6rem; gap: 0.3rem; }
+    header h1 { font-size: 0.95rem; }
+    .controls { gap: 0.35rem; }
+    button, select { padding: 0.25rem 0.6rem; font-size: 0.85rem; }
+    .status { font-size: 0.75rem; }
+    /* min-height:0 lets the panes actually shrink to their flex shares —
+       flex column children otherwise refuse to go below content height */
+    #left { border-right: none; border-bottom: 1px solid #313244; flex: 1; min-height: 0; }
+    #right { flex: 1.6; min-height: 0; }   /* the world deserves most of a phone screen */
+    #world { flex: 2.5; }
+    #instructions { max-height: 32%; font-size: 0.85rem; }
+    #editor { min-height: 4.5rem; }
+    #editor .cm-editor { font-size: 13px; }
 }
