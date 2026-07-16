@@ -606,6 +606,14 @@ main {
     #right { flex: 1.6; min-height: 0; }   /* the world deserves most of a phone screen */
     /* hard floor: whatever the other panes want, the world stays big */
     #world { flex: 2.5; min-height: 40vh; min-height: 40dvh; }
+    /* the output earns space only once it has something to say — until
+       then the world and editor use the bottom of the screen */
+    #output { flex: 0 1 auto; min-height: 2.4rem; max-height: 22%; }
+    #output:empty::before {
+        content: "output appears here after a run";
+        color: #6c7086;
+        font-size: 12px;
+    }
     /* collapsed: size to the (compact) content — nothing gets sliced.
        expanded: cap the height and fade the bottom edge instead of
        cutting a text line in half */
@@ -620,6 +628,6 @@ main {
         mask-image: linear-gradient(#000 calc(100% - 14px), transparent);
         -webkit-mask-image: linear-gradient(#000 calc(100% - 14px), transparent);
     }
-    #editor { min-height: 4.5rem; }
+    #editor { min-height: 8.5rem; }   /* room to actually type a program */
     #editor .cm-editor { font-size: 13px; }
 }
