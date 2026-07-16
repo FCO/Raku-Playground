@@ -23,6 +23,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
+      - name: Version-stamp asset URLs (cache busting)
+        run: sed -i "s/?v=dev/?v=${GITHUB_SHA::8}/g" docs/index.html
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v4
         with:
