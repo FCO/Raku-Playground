@@ -1,3 +1,5 @@
+[![Actions Status](https://github.com/FCO/Raku-Playground/actions/workflows/test.yml/badge.svg)](https://github.com/FCO/Raku-Playground/actions)
+
 NAME
 ====
 
@@ -6,7 +8,9 @@ Raku::Playground - a browser-based Raku playground (Rakudo compiled to JavaScrip
 SYNOPSIS
 ========
 
-    # serve the playground locally
+**▶ Play it now: [https://fco.github.io/Raku-Playground/](https://fco.github.io/Raku-Playground/)**
+
+    # or serve the playground locally
     python3 -m http.server 8000 --directory docs
     # then open http://localhost:8000
 

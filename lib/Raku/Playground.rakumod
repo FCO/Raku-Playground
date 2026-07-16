@@ -9,9 +9,11 @@ Raku::Playground - a browser-based Raku playground (Rakudo compiled to JavaScrip
 
 =head1 SYNOPSIS
 
+B<▶ Play it now: L<https://fco.github.io/Raku-Playground/>>
+
 =begin code
 
-# serve the playground locally
+# or serve the playground locally
 python3 -m http.server 8000 --directory docs
 # then open http://localhost:8000
 
