@@ -20,7 +20,7 @@ prove6 -I. t
 raku -I. t/01-basic.rakutest
 
 # Browser tests (Playwright; starts tools/serve.raku if :8000 is free)
-npm install          # once
+npm install && npx playwright install chromium   # once
 npx playwright test              # all specs (~2 min; loads the 77MB runtime per spec file)
 npx playwright test tests/world.spec.js   # one spec
 
@@ -28,7 +28,7 @@ npx playwright test tests/world.spec.js   # one spec
 mi6 build
 ```
 
-CI: `.github/workflows/test.yml` runs `prove6 -I. t` on Linux/macOS/Windows against the latest Raku; `.github/workflows/playwright.yml` runs the browser suite on every push and PR (bundled Chromium there — locally the config uses the installed Chrome via `channel`). The specs share one page per file (`serial` mode) to avoid reloading the 77MB runtime per test; each spec's `afterAll` must close the page **and the browser** (skipping the browser close makes workers hang for 5 minutes at shutdown and fail the run).
+CI: `.github/workflows/test.yml` runs `prove6 -I. t` on Linux/macOS/Windows against the latest Raku; `.github/workflows/playwright.yml` runs the browser suite on every push and PR (bundled Chromium everywhere — the system Chrome channel hangs at shutdown; teardowns are timeout-guarded). The specs share one page per file (`serial` mode) to avoid reloading the 77MB runtime per test; each spec's `afterAll` must close the page **and the browser** (skipping the browser close makes workers hang for 5 minutes at shutdown and fail the run).
 
 ## Architecture
 

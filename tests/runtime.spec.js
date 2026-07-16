@@ -16,7 +16,11 @@ test.beforeAll(async ({ browser }) => {
     await page.evaluate(() => window.__playground.setSaga("free"));
 });
 
-test.afterAll(async ({ browser }) => { await page.close(); await browser.close(); });
+test.afterAll(async ({ browser }) => {
+    // guard the teardown: a hung browser shutdown must not fail the run
+    await page.close().catch(() => {});
+    await Promise.race([browser.close(), new Promise((r) => setTimeout(r, 15000))]).catch(() => {});
+});
 
 test("runtime becomes ready and Run enables", async () => {
     await expect(page.locator("#status")).toHaveText("Ready");

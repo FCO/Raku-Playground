@@ -19,7 +19,11 @@ test.beforeAll(async ({ browser }) => {
     });
 });
 
-test.afterAll(async ({ browser }) => { await page.close(); await browser.close(); });
+test.afterAll(async ({ browser }) => {
+    // guard the teardown: a hung browser shutdown must not fail the run
+    await page.close().catch(() => {});
+    await Promise.race([browser.close(), new Promise((r) => setTimeout(r, 15000))]).catch(() => {});
+});
 
 test("falling into water fails gracefully", async () => {
     await page.evaluate(() => window.__playground.setLevel("0"));
@@ -100,6 +104,8 @@ test("board scales to fit a phone-sized screen", async () => {
             parseFloat(el.style.getPropertyValue("--scale")));
         expect(scale).toBeLessThanOrEqual(1);
         expect(scale).toBeGreaterThan(0.2);
+        // phone: teaching text folds away so nothing is clipped mid-line
+        expect(await page.$eval("#lvl-more", (el) => el.open)).toBe(false);
         // the page itself must never scroll (iOS chrome-collapse regression)
         const scroll = await page.evaluate(() => ({
             sh: document.scrollingElement.scrollHeight,

@@ -16,7 +16,11 @@ test.beforeAll(async ({ browser }) => {
         window.__playground.sagas.map((s) => ({ id: s.id, n: s.levels.length })));
 });
 
-test.afterAll(async ({ browser }) => { await page.close(); await browser.close(); });
+test.afterAll(async ({ browser }) => {
+    // guard the teardown: a hung browser shutdown must not fail the run
+    await page.close().catch(() => {});
+    await Promise.race([browser.close(), new Promise((r) => setTimeout(r, 15000))]).catch(() => {});
+});
 
 test("saga select lists every saga plus free play", async () => {
     const values = await page.$$eval("#saga option", (opts) => opts.map((o) => o.value));

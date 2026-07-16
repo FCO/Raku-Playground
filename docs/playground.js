@@ -257,6 +257,11 @@ function showDomResult() {
 function showInstructions(level) {
     document.getElementById("lvl-name").textContent = level.name;
     document.getElementById("lvl-goal").textContent = level.goal;
+    const more = document.getElementById("lvl-more");
+    // phones: name + goal stay visible, the teaching text folds away —
+    // a tall clipped panel reads as panes painted over each other
+    more.open = window.matchMedia("(min-width: 701px)").matches;
+    more.hidden = level.steps.length === 0 && !(level.explain?.length);
     const steps = document.getElementById("lvl-steps");
     steps.replaceChildren(...level.steps.map((s) => {
         const li = document.createElement("li");

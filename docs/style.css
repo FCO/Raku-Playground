@@ -127,6 +127,16 @@ main {
 #lvl-goal { margin: 0 0 0.4rem; }
 #lvl-goal::before { content: "Goal: "; font-weight: 700; color: #fab387; }
 
+#lvl-more summary {
+    cursor: pointer;
+    color: #89b4fa;
+    font-weight: 600;
+    margin: 0.2rem 0 0.4rem;
+    user-select: none;
+}
+
+#lvl-more summary:hover { color: #b4d0fb; }
+
 #lvl-steps { margin: 0 0 0.4rem; padding-left: 1.4rem; }
 #lvl-steps li { margin: 0.15rem 0; }
 
@@ -596,7 +606,20 @@ main {
     #right { flex: 1.6; min-height: 0; }   /* the world deserves most of a phone screen */
     /* hard floor: whatever the other panes want, the world stays big */
     #world { flex: 2.5; min-height: 40vh; min-height: 40dvh; }
-    #instructions { max-height: 30%; font-size: 0.85rem; }
+    /* collapsed: size to the (compact) content — nothing gets sliced.
+       expanded: cap the height and fade the bottom edge instead of
+       cutting a text line in half */
+    #instructions {
+        max-height: none;
+        font-size: 0.85rem;
+    }
+    #instructions:has(#lvl-more[open]) {
+        max-height: 45%;
+        overflow: auto;
+        padding-bottom: 16px;
+        mask-image: linear-gradient(#000 calc(100% - 14px), transparent);
+        -webkit-mask-image: linear-gradient(#000 calc(100% - 14px), transparent);
+    }
     #editor { min-height: 4.5rem; }
     #editor .cm-editor { font-size: 13px; }
 }

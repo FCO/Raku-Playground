@@ -1,5 +1,6 @@
-// Browser tests for the playground. Uses the locally installed Chrome
-// (channel: "chrome") so no browser download is needed, and serves docs/
+// Browser tests for the playground. Uses Playwright's bundled Chromium
+// everywhere (`npx playwright install chromium` once) — the system Chrome
+// channel hangs at shutdown often enough to fail whole runs. Serves docs/
 // with the Raku static server (tools/serve.raku) unless one is already
 // running on :8000.
 const { defineConfig } = require("@playwright/test");
@@ -13,8 +14,6 @@ module.exports = defineConfig({
     forbidOnly: !!process.env.CI,
     use: {
         baseURL: "http://localhost:8000",
-        // locally: the installed Chrome (no download); CI: Playwright's chromium
-        channel: process.env.CI ? undefined : "chrome",
         headless: true,
         viewport: { width: 1400, height: 900 },
     },
