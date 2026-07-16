@@ -9,8 +9,8 @@ Raku::Playground is a Swift-Playgrounds-inspired page that runs Raku entirely in
 ## Commands
 
 ```sh
-# Serve the playground locally
-python3 -m http.server 8000 --directory docs
+# Serve the playground locally (zero-dependency Raku static server)
+raku tools/serve.raku
 # then open http://localhost:8000 (first load takes ~1-2 min: perl6.js is 77MB)
 
 # Run the Raku test suite (same as CI)
@@ -19,7 +19,7 @@ prove6 -I. t
 # Run a single test file
 raku -I. t/01-basic.rakutest
 
-# Browser tests (Playwright; starts its own server if :8000 is free)
+# Browser tests (Playwright; starts tools/serve.raku if :8000 is free)
 npm install          # once
 npx playwright test              # all specs (~2 min; loads the 77MB runtime per spec file)
 npx playwright test tests/world.spec.js   # one spec

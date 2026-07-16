@@ -1,6 +1,7 @@
 // Browser tests for the playground. Uses the locally installed Chrome
 // (channel: "chrome") so no browser download is needed, and serves docs/
-// with Python's static server unless one is already running on :8000.
+// with the Raku static server (tools/serve.raku) unless one is already
+// running on :8000.
 const { defineConfig } = require("@playwright/test");
 
 module.exports = defineConfig({
@@ -18,7 +19,7 @@ module.exports = defineConfig({
         viewport: { width: 1400, height: 900 },
     },
     webServer: {
-        command: "python3 -m http.server 8000 --directory docs",
+        command: "raku tools/serve.raku --port=8000 --dir=docs",
         port: 8000,
         reuseExistingServer: true,
     },

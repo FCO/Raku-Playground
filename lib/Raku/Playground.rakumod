@@ -13,8 +13,8 @@ B<▶ Play it now: L<https://fco.github.io/Raku-Playground/>>
 
 =begin code
 
-# or serve the playground locally
-python3 -m http.server 8000 --directory docs
+# or serve the playground locally (in Raku, of course)
+raku tools/serve.raku
 # then open http://localhost:8000
 
 =end code
