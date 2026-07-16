@@ -95,10 +95,17 @@ test("board scales to fit a phone-sized screen", async () => {
         }));
         expect(board.width).toBeLessThanOrEqual(world.width);   // fits horizontally
         expect(board.width).toBeGreaterThan(world.width * 0.5); // …but stays substantial
+        expect(world.height).toBeGreaterThan(844 * 0.35);       // the world pane dominates
         const scale = await page.$eval("#world .board", (el) =>
             parseFloat(el.style.getPropertyValue("--scale")));
         expect(scale).toBeLessThanOrEqual(1);
         expect(scale).toBeGreaterThan(0.2);
+        // the page itself must never scroll (iOS chrome-collapse regression)
+        const scroll = await page.evaluate(() => ({
+            sh: document.scrollingElement.scrollHeight,
+            ih: window.innerHeight,
+        }));
+        expect(scroll.sh).toBeLessThanOrEqual(scroll.ih + 1);
     } finally {
         await page.setViewportSize({ width: 1400, height: 900 });
         await page.evaluate(() => window.__playground.setLevel("0")); // re-fit at desktop size

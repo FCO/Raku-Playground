@@ -13,6 +13,13 @@ html, body {
 body {
     display: flex;
     flex-direction: column;
+    overflow: hidden; /* app layout: panes scroll internally, the page never does */
+}
+
+/* iOS: 100% includes the area behind the collapsing browser chrome, making
+   the page scroll and hiding the bottom panes — dvh tracks the visible area */
+@supports (height: 100dvh) {
+    body { height: 100dvh; }
 }
 
 header {
@@ -574,8 +581,9 @@ main {
        flex column children otherwise refuse to go below content height */
     #left { border-right: none; border-bottom: 1px solid #313244; flex: 1; min-height: 0; }
     #right { flex: 1.6; min-height: 0; }   /* the world deserves most of a phone screen */
-    #world { flex: 2.5; }
-    #instructions { max-height: 32%; font-size: 0.85rem; }
+    /* hard floor: whatever the other panes want, the world stays big */
+    #world { flex: 2.5; min-height: 40vh; min-height: 40dvh; }
+    #instructions { max-height: 30%; font-size: 0.85rem; }
     #editor { min-height: 4.5rem; }
     #editor .cm-editor { font-size: 13px; }
 }
