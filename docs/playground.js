@@ -1,6 +1,7 @@
 import { EditorView, basicSetup, keymap, StreamLanguage, perl, oneDark } from "./vendor/codemirror.js";
 import { runtime } from "./raku-runtime.js";
-import { LEVELS, World, PRELUDE } from "./world.js";
+import { World, PRELUDE, sleep, nextLevelButton } from "./world.js";
+import { SAGAS } from "./sagas/index.js";
 
 const statusEl = document.getElementById("status");
 const runButton = document.getElementById("run");
@@ -8,6 +9,7 @@ const stepButton = document.getElementById("step");
 const clearButton = document.getElementById("clear");
 const exampleButton = document.getElementById("example");
 const hintButton = document.getElementById("hint-btn");
+const sagaSelect = document.getElementById("saga");
 const levelSelect = document.getElementById("level");
 const speedSelect = document.getElementById("speed");
 const outputEl = document.getElementById("output");
@@ -36,12 +38,13 @@ for <red green blue> -> $color {
 say 'rendered!';
 `;
 
-let world = null;       // active World in puzzle mode, null in free play
+let world = null;       // active World in puzzle mode, null otherwise
+let domLevel = null;    // active dom-type level (preview-pane world), null otherwise
 let playing = false;    // animation playback (or step session) in progress
 let stepSession = false;
+let stepping = false;   // a single stepOnce animation is in flight
 let runCount = 0;
-
-const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+const domBanner = document.getElementById("dom-banner");
 
 function appendOutput(text, className) {
     const span = document.createElement("span");
@@ -68,7 +71,10 @@ function refreshControls() {
     statusEl.className = `status ${playing ? "running" : state}`;
     runButton.disabled = !idle;
     runButton.textContent = state === "loading" ? "Loading…" : "Run";
-    stepButton.disabled = !(idle || stepSession);
+    stepButton.disabled = !(idle || (stepSession && !stepping));
+    // switching level or saga mid-run would tangle playback, progress and UI state
+    sagaSelect.disabled = playing;
+    levelSelect.disabled = playing;
 }
 
 runtime.onStateChange(() => refreshControls());
@@ -77,10 +83,39 @@ function setEditorText(text) {
     editor.dispatch({ changes: { from: 0, to: editor.state.doc.length, insert: text } });
 }
 
-// ---------- progression ----------
+// ---------- progression (tracked per saga) ----------
 
-const PROGRESS_KEY = "raku-playground-progress";
-let progress = new Set(JSON.parse(localStorage.getItem(PROGRESS_KEY) ?? "[]"));
+// storage may be unavailable (blocked cookies, some file:// setups) or hold
+// corrupted values — none of that may prevent the playground from booting
+function storageGet(key) {
+    try { return localStorage.getItem(key); } catch { return null; }
+}
+function storageSet(key, value) {
+    try { localStorage.setItem(key, value); } catch { /* progress just won't persist */ }
+}
+function storageRemove(key) {
+    try { localStorage.removeItem(key); } catch { /* ignore */ }
+}
+
+const progressKey = (sagaId) => `raku-playground-progress:${sagaId}`;
+
+// pre-saga versions stored Learn Raku progress under a plain key — migrate it
+{
+    const legacy = storageGet("raku-playground-progress");
+    if (legacy !== null && storageGet(progressKey("learn-raku")) === null) {
+        storageSet(progressKey("learn-raku"), legacy);
+        storageRemove("raku-playground-progress");
+    }
+}
+
+let currentSaga = SAGAS[0];
+let progress = new Set();
+
+function loadProgress() {
+    let stored;
+    try { stored = JSON.parse(storageGet(progressKey(currentSaga.id)) ?? "[]"); } catch { stored = []; }
+    progress = new Set(Array.isArray(stored) ? stored : []);
+}
 
 // first level not yet completed — the furthest one that may be played
 function maxUnlocked() {
@@ -92,64 +127,131 @@ function maxUnlocked() {
 function markComplete(i) {
     if (progress.has(i)) return;
     progress.add(i);
-    localStorage.setItem(PROGRESS_KEY, JSON.stringify([...progress].sort((a, b) => a - b)));
+    storageSet(progressKey(currentSaga.id), JSON.stringify([...progress].sort((a, b) => a - b)));
     refreshLevelLabels();
 }
 
 function refreshLevelLabels() {
+    const max = maxUnlocked();
     for (const opt of levelSelect.options) {
-        if (opt.value === "free") continue;
         const i = Number(opt.value);
-        const locked = i > maxUnlocked();
+        const locked = i > max;
         opt.disabled = locked;
-        opt.textContent = `${progress.has(i) ? "✓ " : locked ? "🔒 " : ""}${i + 1}. ${LEVELS[i].name}`;
+        opt.textContent = `${progress.has(i) ? "✓ " : locked ? "🔒 " : ""}${i + 1}. ${currentSaga.levels[i].name}`;
     }
 }
 
-// ---------- levels / modes ----------
+// ---------- sagas / levels / modes ----------
 
 let currentLevel = "0";
 
+// One place owns the per-mode UI state and cross-mode teardown; the drift
+// between hand-maintained flag blocks was a bug factory.
+function applyMode(mode) { // "puzzle" | "dom" | "free"
+    stepSession = false;
+    stepping = false;
+    domBanner.hidden = true;
+    worldEl.hidden = mode !== "puzzle";
+    previewEl.hidden = mode === "puzzle";
+    exampleButton.hidden = mode !== "free";
+    speedSelect.hidden = mode !== "puzzle";
+    stepButton.hidden = mode !== "puzzle";
+    previewEl.replaceChildren();
+    if (mode !== "puzzle") {
+        world = null;
+        window.PG = undefined;
+        worldEl.replaceChildren(); // drop any stale board (and its banner)
+    }
+    if (mode !== "dom") domLevel = null;
+}
+
+function setSaga(value) {
+    if (playing) return; // mid-run switches tangle playback, progress and UI
+    sagaSelect.value = value;
+    if (value === "free") {
+        levelSelect.hidden = true;
+        enterFreePlay();
+        return;
+    }
+    levelSelect.hidden = false;
+    currentSaga = SAGAS.find((s) => s.id === value) ?? SAGAS[0];
+    loadProgress();
+    levelSelect.replaceChildren(...currentSaga.levels.map((level, i) => {
+        const opt = document.createElement("option");
+        opt.value = String(i);
+        opt.textContent = `${i + 1}. ${level.name}`;
+        return opt;
+    }));
+    refreshLevelLabels();
+    // land on the furthest unlocked level (or the last one when all are done)
+    setLevel(String(Math.min(maxUnlocked(), currentSaga.levels.length - 1)));
+}
+
+function enterFreePlay() {
+    if (playing) return;
+    currentLevel = "free";
+    applyMode("free");
+    showInstructions({
+        name: "Free play",
+        goal: "Write any Raku you like. Output appears below; DOM built via the PREVIEW handle appears in the preview pane.",
+        steps: [],
+    });
+    setEditorText(SAMPLE);
+    refreshControls();
+}
+
 function setLevel(value) {
-    if (value !== "free" && Number(value) > maxUnlocked()) {
+    if (playing) return; // mid-run switches tangle playback, progress and UI
+    if (Number(value) > maxUnlocked()) {
         levelSelect.value = currentLevel; // locked — refuse and restore selection
         return;
     }
     currentLevel = value;
     levelSelect.value = value;
-    stepSession = false;
-    const free = value === "free";
-    worldEl.hidden = free;
-    previewEl.hidden = !free;
-    exampleButton.hidden = !free;
-    speedSelect.hidden = free;
-    stepButton.hidden = free;
 
-    if (free) {
-        world = null;
-        window.PG = undefined;
-        showInstructions({
-            name: "Free play",
-            goal: "Write any Raku you like. Output appears below; DOM built via the PREVIEW handle appears in the preview pane.",
-            steps: [],
-        });
-        setEditorText(SAMPLE);
+    const idx = Number(value);
+    const level = currentSaga.levels[idx];
+    const dom = level.type === "dom";
+    applyMode(dom ? "dom" : "puzzle");
+
+    if (dom) {
+        domLevel = level;
     } else {
-        const idx = Number(value);
-        const level = LEVELS[idx];
         world = new World(level, worldEl);
         window.PG = {
             command: (name) => world.command(name),
             query: (name) => world.query(name),
         };
         world.onFinished = (res) => { if (res.success) markComplete(idx); };
-        world.onNext = idx + 1 < LEVELS.length ? () => setLevel(String(idx + 1)) : null;
+        world.onNext = idx + 1 < currentSaga.levels.length ? () => setLevel(String(idx + 1)) : null;
         world.render();
         applyView();
-        showInstructions(level);
-        setEditorText(level.starter);
     }
+    showInstructions(level);
+    setEditorText(level.starter);
     refreshControls();
+}
+
+function showDomResult() {
+    const idx = Number(currentLevel);
+    let res;
+    try {
+        res = domLevel.check(previewEl);
+    } catch (e) {
+        res = { success: false, message: String(e) };
+    }
+    if (res === true) res = { success: true };
+    if (!res) res = { success: false };
+    domBanner.className = `dom-banner ${res.success ? "success" : "failure"}`;
+    domBanner.textContent = res.success
+        ? "Level complete! 🎉"
+        : `Not yet — ${res.message ?? "compare the preview with the goal"}`;
+    if (res.success) {
+        markComplete(idx);
+        if (idx + 1 < currentSaga.levels.length)
+            domBanner.append(" ", nextLevelButton(() => setLevel(String(idx + 1))));
+    }
+    domBanner.hidden = false;
 }
 
 function showInstructions(level) {
@@ -188,11 +290,19 @@ function renderExplain(paragraphs) {
 
 // ---------- drag to rotate the board ----------
 
-const view = { rx: 55, rz: 45 };
+// the CSS custom properties on #world are the source of truth for the
+// default angles; JS only takes over once it needs to change them
+const worldStyle = getComputedStyle(worldEl);
+const view = {
+    rx: parseFloat(worldStyle.getPropertyValue("--rotX")) || 55,
+    rz: parseFloat(worldStyle.getPropertyValue("--rotZ")) || 45,
+};
 
 function applyView() {
     worldEl.style.setProperty("--rotX", `${view.rx}deg`);
     worldEl.style.setProperty("--rotZ", `${view.rz}deg`);
+    // Camelia's stare direction is a screen projection — recompute when the board turns
+    world?.setHeading(world.arrowFacing, 0);
 }
 
 let dragFrom = null;
@@ -203,7 +313,9 @@ worldEl.addEventListener("pointerdown", (e) => {
 });
 worldEl.addEventListener("pointermove", (e) => {
     if (!dragFrom) return;
-    view.rz = dragFrom.rz + (e.clientX - dragFrom.x) * 0.4;
+    // grab metaphor: the near edge follows the pointer — dragging right
+    // spins the board counterclockwise, so the horizontal delta subtracts
+    view.rz = dragFrom.rz - (e.clientX - dragFrom.x) * 0.4;
     view.rx = Math.min(85, Math.max(15, dragFrom.rx - (e.clientY - dragFrom.y) * 0.3));
     applyView();
 });
@@ -215,7 +327,12 @@ applyView();
 
 function evalUserCode() {
     const src = editor.state.doc.toString();
-    runtime.run(world ? `${PRELUDE}\n${src}` : src);
+    // any saga may carry a prelude; puzzle levels get the command PRELUDE first
+    const parts = [];
+    if (world) parts.push(PRELUDE);
+    if ((world || domLevel) && currentSaga.prelude) parts.push(currentSaga.prelude);
+    parts.push(src);
+    runtime.run(parts.join("\n"));
 }
 
 async function record() {
@@ -226,6 +343,7 @@ async function record() {
         world.render();
     } else {
         previewEl.replaceChildren();
+        domBanner.hidden = true;
     }
     // Let the browser paint before the synchronous eval blocks the thread.
     statusEl.textContent = STATUS_TEXT.running;
@@ -244,6 +362,7 @@ async function runCode() {
     try {
         await record();
         if (world) await world.playAll(Number(speedSelect.value));
+        else if (domLevel) showDomResult();
     } finally {
         playing = false;
         refreshControls();
@@ -266,13 +385,20 @@ async function stepCode() {
         refreshControls();
         return;
     }
-    const more = await world.stepOnce();
-    if (!more) {
-        world.finish();
-        playing = false;
-        stepSession = false;
-    }
+    if (stepping) return; // a step animation is already in flight
+    stepping = true;
     refreshControls();
+    try {
+        const more = await world.stepOnce();
+        if (!more) {
+            world.finish();
+            playing = false;
+            stepSession = false;
+        }
+    } finally {
+        stepping = false;
+        refreshControls();
+    }
 }
 
 // ---------- editor / wiring ----------
@@ -288,16 +414,17 @@ const editor = new EditorView({
     ],
 });
 
-levelSelect.replaceChildren(
-    ...LEVELS.map((level, i) => {
+sagaSelect.replaceChildren(
+    ...SAGAS.map((saga) => {
         const opt = document.createElement("option");
-        opt.value = String(i);
-        opt.textContent = `${i + 1}. ${level.name}`;
+        opt.value = saga.id;
+        opt.textContent = saga.title;
+        opt.title = saga.description;
         return opt;
     }),
     new Option("Free play", "free"),
 );
-refreshLevelLabels();
+sagaSelect.addEventListener("change", () => setSaga(sagaSelect.value));
 levelSelect.addEventListener("change", () => setLevel(levelSelect.value));
 
 runButton.addEventListener("click", runCode);
@@ -317,12 +444,14 @@ window.__playground = {
     runtime,
     runCode,
     stepCode,
-    setLevel: (v) => setLevel(String(v)),
+    setSaga: (v) => setSaga(String(v)),
+    setLevel: (v) => (String(v) === "free" ? setSaga("free") : setLevel(String(v))),
     getWorld: () => world,
     isPlaying: () => playing,
-    levels: LEVELS,
+    sagas: SAGAS,
+    get levels() { return currentSaga.levels; },
     progress: () => [...progress],
 };
 
-setLevel("0");
+setSaga(SAGAS[0].id);
 runtime.init();

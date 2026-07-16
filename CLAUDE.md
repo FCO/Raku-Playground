@@ -19,11 +19,16 @@ prove6 -I. t
 # Run a single test file
 raku -I. t/01-basic.rakutest
 
+# Browser tests (Playwright; starts its own server if :8000 is free)
+npm install          # once
+npx playwright test              # all specs (~2 min; loads the 77MB runtime per spec file)
+npx playwright test tests/world.spec.js   # one spec
+
 # Regenerate README.md from the pod in the module, update META6.json (App::Mi6)
 mi6 build
 ```
 
-CI (`.github/workflows/test.yml`) runs `prove6 -I. t` on Linux/macOS/Windows against the latest Raku.
+CI: `.github/workflows/test.yml` runs `prove6 -I. t` on Linux/macOS/Windows against the latest Raku; `.github/workflows/playwright.yml` runs the browser suite on every push and PR (bundled Chromium there — locally the config uses the installed Chrome via `channel`). The specs share one page per file (`serial` mode) to avoid reloading the 77MB runtime per test; each spec's `afterAll` must close the page **and the browser** (skipping the browser close makes workers hang for 5 minutes at shutdown and fail the run).
 
 ## Architecture
 
@@ -44,9 +49,13 @@ The playground is framework-free vanilla JS in `docs/`:
   - Queries return 1/0 and the prelude compares `== 1` (numeric coercion across the JS boundary is more reliable than JS booleans).
   - `PG.command` throws after 1000 commands (runaway-loop guard); a `loop { }` recording *no* commands still freezes the tab — the sync eval can't be interrupted.
   - After Camelia falls (moving onto water/void), further commands are silently dropped; the recorded fall animates and the run fails.
-  - Level format in `world.js` `LEVELS`: `{ name, goal, steps[], explain[], grid[], start: {x,y,facing}, starter, hint, solution }`; grid legend `#` path, `G` gem, `W` rock (bump), `~` water / ` ` void (fall). `explain` paragraphs render in the instructions panel with `` `backticks` `` becoming `<code>`. **`solution` is load-bearing**: the headless verification runs every level's solution and requires the success banner — keep it correct when editing levels.
-  - 16 levels teach Raku syntax progressively (statements → `xx` → `for`/ranges → `until`/`while` → conditionals → subs → `elsif`/`else` → pointy blocks → `repeat` → truthiness via the numeric `gems-left` query → `loop`/`next`/`last` → `given`/`when` → named parameters → `with`/`//`/`?? !!` → recap). Topics aligned with docs.raku.org/language/control.
-  - **Progression is locked**: a level is selectable only when all previous ones are completed; completion is stored in localStorage under `raku-playground-progress`; the success banner offers a "Next level →" button. Free play is always available.
+  - **Sagas** (sets of levels) live in `docs/sagas/` — one file per saga exporting `{ id, title, description, levels }` (optionally `prelude`: Raku source prepended to every level run in the saga — after the command `PRELUDE` on puzzle levels; free play never gets preludes), registered in `docs/sagas/index.js`. **To add a saga: create `docs/sagas/<id>.js` and add one import line to `index.js`** — the saga picker, per-saga progression, and verification pick it up automatically. Current sagas: `learn-raku` (16 puzzle levels), `memoized-dom` (6 dom levels), `gem-rush` (3 challenge puzzle levels).
+  - **Two level types.** Default = puzzle world. `type: "dom"` levels use the preview pane as the world: the saga's `prelude` (e.g. the inlined MemoizedDOM framework) is prepended to the run, and success is `check(previewEl)` → `{ success, message? }` (may interact — click buttons — before asserting). Result shows in `#dom-banner`.
+  - **Rakudo.js gotcha discovered here: `our`-scoped symbols persist across `evalP6` calls** (lexicals don't). A plain `class Foo` re-declared on the next Run dies with "Redeclaration of symbol" — all classes in dom-level code and preludes must be **`my`-scoped** (`my class`, `my role`).
+  - The MemoizedDOM prelude is single-lined by the saga file at load (a `}` only terminates a statement at end-of-line, so the join appends `;` to block-final lines); keep `if … } else {` on one physical source line there.
+  - Level format: `{ name, goal, steps[], explain[], grid[], start: {x,y,facing}, starter, hint, solution }`; grid legend `#` path, `G` gem, `W` rock (bump), `~` water / ` ` void (fall). `explain` paragraphs render in the instructions panel with `` `backticks` `` becoming `<code>`. **`solution` is load-bearing**: the headless verification runs every level's solution in every saga and requires the success banner — keep it correct when editing levels.
+  - Learn Raku teaches syntax progressively (statements → `xx` → `for`/ranges → `until`/`while` → conditionals → subs → `elsif`/`else` → pointy blocks → `repeat` → truthiness via the numeric `gems-left` query → `loop`/`next`/`last` → `given`/`when` → named parameters → `with`/`//`/`?? !!` → recap). Topics aligned with docs.raku.org/language/control.
+  - **Progression is locked per saga**: a level is selectable only when all previous ones in its saga are completed; completion is stored in localStorage under `raku-playground-progress:<sagaId>` (a legacy un-suffixed key is migrated to `learn-raku` on load); the success banner offers a "Next level →" button. Free play is always available.
   - The board is pseudo-isometric CSS driven by `--rotX`/`--rotZ` custom properties on `#world` (default 55°/45°); **click-drag rotates it** (pointer handlers in playground.js). Sprites counter-rotate via `.upright` using `calc()` on the same variables — change angles only through the variables.
 - **Single-file build**: `node tools/build-single.mjs` (esbuild on PATH or `ESBUILD=/path/to/esbuild`) produces `dist/raku-playground.html` (~75MB) — app JS bundled, CSS and perl6.js inlined, shareable and works from `file://`. The shim detects `window.PERL6_EMBEDDED` and polls for `evalP6` instead of injecting a script tag. `dist/` is gitignored.
 - `docs/vendor/codemirror.js` — committed one-time esbuild bundle of CodeMirror 6 with the legacy Perl mode for highlighting (no CM6 Raku grammar exists) and the one-dark theme (the default highlight colors are unreadable on the dark UI). Regenerate with:
@@ -64,5 +73,5 @@ The playground is framework-free vanilla JS in `docs/`:
 
 - This project is managed by App::Mi6 (`dist.ini`). **Do not edit `README.md` directly** — it is generated from the pod at the bottom of `lib/Raku/Playground.rakumod` (see `[ReadmeFromPod]` in `dist.ini`). Edit the pod and run `mi6 build`.
 - `META6.json` declares the distribution: new modules go under `provides`, runtime dependencies under `depends`.
-- Tests are `t/*.rakutest`; version and release notes live in `Changes`; `mi6 release` manages releases.
+- Tests are `t/*.rakutest`; version and release notes live in `Changes`; `mi6 release` manages releases. **Caveat before any release**: the dist tarball would include the 77MB `docs/perl6.js` (mi6 packages tracked files) — likely over ecosystem upload limits; exclude the site from the dist or don't release until that's resolved.
 - `.precomp/` is precompilation cache output and must never be committed or edited.

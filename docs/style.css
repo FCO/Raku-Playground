@@ -302,22 +302,27 @@ main {
     font-size: 28px;
 }
 
+/* .lift is the animation layer inside .upright: keyframes stay plain
+   translate/scale and never restate the counter-rotation */
+#world .lift { display: inline-block; }
+
 #world .gem .upright {
     filter: drop-shadow(0 3px 3px rgba(0, 40, 90, 0.35));
-    animation: bob 1.6s ease-in-out infinite;
 }
+
+#world .gem .lift { animation: bob 1.6s ease-in-out infinite; }
 
 @keyframes bob {
-    0%, 100% { transform: rotateZ(calc(var(--rotZ) * -1)) rotateX(calc(var(--rotX) * -1)) translateY(-8px); }
-    50%      { transform: rotateZ(calc(var(--rotZ) * -1)) rotateX(calc(var(--rotX) * -1)) translateY(-16px); }
+    0%, 100% { transform: translateY(0); }
+    50%      { transform: translateY(-8px); }
 }
 
-#world .gem.collected .upright {
+#world .gem.collected .lift {
     animation: sparkle 0.5s ease-out forwards;
 }
 
 @keyframes sparkle {
-    to { transform: rotateZ(calc(var(--rotZ) * -1)) rotateX(calc(var(--rotX) * -1)) translateY(-44px) scale(2); opacity: 0; }
+    to { transform: translateY(-36px) scale(2); opacity: 0; }
 }
 
 #world .camelia { z-index: 2; }
@@ -342,13 +347,17 @@ main {
 
 /* ---- Camelia, in CSS: striped body, round head, four flapping wings ---- */
 
+#world .bobber {
+    display: inline-block;
+    animation: hover-bob 1.2s ease-in-out infinite;
+}
+
 #world .butterfly {
     position: relative;
     display: block;
     width: 56px;
     height: 48px;
     transform-style: preserve-3d;
-    animation: hover-bob 1.2s ease-in-out infinite;
 }
 
 @keyframes hover-bob {
@@ -457,9 +466,13 @@ main {
     margin-left: -10px;
     transform: translateZ(5px);  /* the face sits in front of the flapping wings */
     border-radius: 50% 50% 48% 48% / 55% 55% 45% 45%;
+    /* pupils are separate layers so they can look toward the movement
+       direction via --look-x/--look-y (set from world.js setHeading) */
     background:
-        radial-gradient(circle at 30% 36%, #0a0a0a 0 1.8px, #fff 2.2px 4.2px, transparent 4.7px),
-        radial-gradient(circle at 70% 36%, #0a0a0a 0 1.8px, #fff 2.2px 4.2px, transparent 4.7px),
+        radial-gradient(circle at calc(30% + var(--look-x, 0px)) calc(36% + var(--look-y, 0px)), #0a0a0a 0 1.8px, transparent 2.3px),
+        radial-gradient(circle at calc(70% + var(--look-x, 0px)) calc(36% + var(--look-y, 0px)), #0a0a0a 0 1.8px, transparent 2.3px),
+        radial-gradient(circle at 30% 36%, #fff 0 4.2px, transparent 4.7px),
+        radial-gradient(circle at 70% 36%, #fff 0 4.2px, transparent 4.7px),
         #ffe93d;
     border: 1.5px solid #0a0a0a;
 }
@@ -524,7 +537,7 @@ main {
 #world .banner.success { background: #a6e3a1; color: #14351a; }
 #world .banner.failure { background: #f38ba8; color: #40101f; }
 
-#world .banner .next-level {
+.next-level {
     margin-left: 0.6rem;
     padding: 0.25rem 0.9rem;
     border: none;
@@ -535,7 +548,18 @@ main {
     cursor: pointer;
 }
 
-#world .banner .next-level:hover { background: #1e4a26; }
+.next-level:hover { background: #1e4a26; }
+
+/* result strip for dom-type levels, between preview and output */
+.dom-banner {
+    padding: 0.45rem 1rem;
+    font-weight: 700;
+    text-align: center;
+    border-bottom: 1px solid #313244;
+}
+
+.dom-banner.success { background: #a6e3a1; color: #14351a; }
+.dom-banner.failure { background: #f38ba8; color: #40101f; }
 
 @media (max-width: 700px) {
     main { flex-direction: column; }

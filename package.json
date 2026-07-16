@@ -1,0 +1,11 @@
+{
+  "name": "raku-playground",
+  "private": true,
+  "description": "Browser tests for the Raku Playground (the Raku distribution itself is managed by mi6)",
+  "scripts": {
+    "test": "playwright test"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.49.0"
+  }
+}

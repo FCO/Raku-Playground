@@ -11,6 +11,7 @@
 <header>
     <h1>🦋 Raku Playground</h1>
     <div class="controls">
+        <select id="saga" title="Choose a saga"></select>
         <select id="level" title="Choose a level"></select>
         <span id="status" class="status loading">Loading Raku runtime (~77 MB), this takes a while…</span>
         <select id="speed" title="Playback speed">
@@ -39,6 +40,7 @@
     <div id="right">
         <div id="world" hidden></div>
         <div id="preview"></div>
+        <div id="dom-banner" class="dom-banner" hidden></div>
         <pre id="output" aria-live="polite"></pre>
     </div>
 </main>

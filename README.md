@@ -15,7 +15,7 @@ DESCRIPTION
 
 Raku::Playground is a Swift-Playgrounds-inspired page that runs Raku entirely in the browser: a CodeMirror editor, a Run button, an output pane, and an animated puzzle world, powered by Rakudo compiled to JavaScript (`docs/perl6.js`). No backend is needed — the whole playground is a static site under `docs/`, ready for GitHub Pages.
 
-Guide Camelia 🦋 through 16 *Learn Raku* levels — a guided tour of Raku syntax (statements, `xx`, `for`, `until`, conditionals, subs, `given`/ `when`, named parameters, `with` and more) with rich explanations on every level, locked progression, adjustable playback speed, step-through, and a click-and-drag 3D world:
+Guide Camelia 🦋 through *sagas* — sets of levels. The 16-level *Learn Raku* saga is a guided tour of Raku syntax (statements, `xx`, `for`, `until`, conditionals, subs, `given`/`when`, named parameters, `with` and more) with rich explanations on every level; *Build Websites* teaches [MemoizedDOM](https://github.com/FCO/MemoizedDOM) — declarative, memoized web pages in Raku, rendered live in the preview pane; *Gem Rush* adds challenge islands. Locked progression per saga, adjustable playback speed, step-through, and a click-and-drag 3D world. New sagas are single JavaScript files dropped into `docs/sagas/`:
 
 ```raku
 until is-blocked {
@@ -24,7 +24,7 @@ until is-blocked {
 }
 ```
 
-Commands: `move-forward`, `turn-left`, `turn-right`, `collect-gem`, and the queries `is-blocked`, `is-blocked-left`, `is-blocked-right`, `is-on-gem`.
+Commands: `move-forward`, `turn-left`, `turn-right`, `collect-gem`, and the queries `is-blocked`, `is-blocked-left`, `is-blocked-right`, `is-on-gem`, and `gems-left` (an `Int` — so `while gems-left { … }` just works).
 
 In *Free play* mode, Raku code can render UI into the preview pane:
 
