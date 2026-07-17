@@ -457,6 +457,15 @@ levelSelect.addEventListener("change", () => setLevel(levelSelect.value));
 
 runButton.addEventListener("click", runCode);
 stepButton.addEventListener("click", stepCode);
+
+// Cmd+Enter (mac) / Ctrl+Enter (elsewhere) runs from anywhere — the editor's
+// own Mod-Enter keymap only fires while it has focus
+document.addEventListener("keydown", (e) => {
+    if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
+        e.preventDefault();
+        runCode();
+    }
+});
 clearButton.addEventListener("click", () => { outputEl.textContent = ""; });
 exampleButton.addEventListener("click", () => {
     setEditorText(DOM_EXAMPLE);

@@ -27,6 +27,24 @@ test("runtime becomes ready and Run enables", async () => {
     await expect(page.locator("#run")).toBeEnabled();
 });
 
+test("Cmd/Ctrl+Enter runs the code from any focus", async () => {
+    await clearOutput(page);
+    await page.evaluate(() => {
+        const { editor } = window.__playground;
+        editor.dispatch({ changes: { from: 0, to: editor.state.doc.length, insert: "say 'via shortcut';" } });
+    });
+    await page.click("#output"); // focus explicitly OUTSIDE the editor
+    await page.keyboard.press(process.platform === "darwin" ? "Meta+Enter" : "Control+Enter");
+    await waitIdle(page);
+    expect(await outputText(page)).toContain("via shortcut");
+    // and from inside the editor (CodeMirror's own keymap)
+    await clearOutput(page);
+    await page.click("#editor .cm-content");
+    await page.keyboard.press(process.platform === "darwin" ? "Meta+Enter" : "Control+Enter");
+    await waitIdle(page);
+    expect(await outputText(page)).toContain("via shortcut");
+});
+
 test("say prints to the output pane", async () => {
     await clearOutput(page);
     await runProgram(page, 'say 42;');
