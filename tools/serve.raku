@@ -38,7 +38,11 @@ sub handle($conn, IO::Path $root) {
 
     my $request = $conn.get or return;
     my ($method, $raw-path) = $request.split(' ');
-    while $conn.get { }     # drain the header lines up to the blank one
+    my $accepts-gzip = False;
+    while my $line = $conn.get {   # read headers up to the blank line
+        $accepts-gzip = True
+            if $line.lc.contains('accept-encoding') && $line.lc.contains('gzip');
+    }
 
     my $path = $raw-path.split('?')[0]
         .subst(/'%' (<:AHex> ** 2)/, { chr(:16(~$0)) }, :g);
@@ -49,14 +53,40 @@ sub handle($conn, IO::Path $root) {
         respond($conn, $method, '404 Not Found', %MIME<txt>, 'Not Found'.encode);
     } else {
         my $type = %MIME{$file.extension.lc} // 'application/octet-stream';
-        respond($conn, $method, '200 OK', $type, $file.slurp(:bin));
+        # Big JS assets (perl6.js) are ~77 MB raw / ~10 MB gzipped — serve a
+        # cached .gz when the client accepts it (mirrors GitHub Pages, and
+        # keeps local iteration fast). Falls back to the raw file on any error.
+        my $gz = ($accepts-gzip && $file.extension.lc eq 'js' && $file.s > 1_000_000)
+            ?? ensure-gz($file) !! Nil;
+        if $gz {
+            respond($conn, $method, '200 OK', $type, $gz.slurp(:bin), :encoding<gzip>);
+        } else {
+            respond($conn, $method, '200 OK', $type, $file.slurp(:bin));
+        }
     }
 }
 
-sub respond($conn, $method, $status, $type, Blob $body) {
-    $conn.write: ("HTTP/1.1 $status\r\n"
+# Return an up-to-date gzipped sibling of $file, generating it via the system
+# `gzip` if missing/stale. Returns Nil on any failure so the caller serves raw.
+sub ensure-gz(IO::Path $file --> IO::Path) {
+    my $gz = ($file.absolute ~ '.gz').IO;
+    return $gz if $gz.e && $gz.modified >= $file.modified;
+    my $ok = try {
+        my $proc = run 'gzip', '-c', $file.absolute, :out, :bin;
+        my $blob = $proc.out.slurp(:close);
+        die 'gzip failed' unless $proc.exitcode == 0;
+        $gz.spurt: $blob;
+        True;
+    };
+    $ok && $gz.e ?? $gz !! Nil;
+}
+
+sub respond($conn, $method, $status, $type, Blob $body, :$encoding) {
+    my $head = "HTTP/1.1 $status\r\n"
         ~ "Content-Type: $type\r\n"
-        ~ "Content-Length: {$body.bytes}\r\n"
-        ~ "Connection: close\r\n\r\n").encode('ascii');
+        ~ "Content-Length: {$body.bytes}\r\n";
+    $head ~= "Content-Encoding: $encoding\r\nVary: Accept-Encoding\r\n" if $encoding;
+    $head ~= "Connection: close\r\n\r\n";
+    $conn.write: $head.encode('ascii');
     $conn.write: $body unless $method eq 'HEAD';
 }

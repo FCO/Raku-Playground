@@ -8,6 +8,15 @@ const LOAD_TIMEOUT_MS = 120_000;
 // stderr is buffered inside perl6.js and may flush a tick after evalP6
 // returns, so keep forwarding console.error to the pane briefly after a run.
 const STDERR_GRACE_MS = 250;
+// Decompressed size of perl6.js. On production it arrives gzipped, so the
+// response's Content-Length is the *compressed* size (~10 MB) while the
+// stream yields these decompressed bytes — we track progress against this.
+// Update it if perl6.js is re-vendored (must be ≥ the real size or the bar
+// finishes early and stalls at 99%).
+const ESTIMATED_UNCOMPRESSED_BYTES = 77_540_424;
+// Cache-busting build id, stamped into index.html at deploy time; "dev"
+// locally. Versioning perl6.js is what makes the service worker cache safe.
+const BUILD = (typeof window !== "undefined" && window.__BUILD__) || "dev";
 
 const listeners = [];
 let state = "uninitialized";
@@ -29,6 +38,8 @@ export const runtime = {
     // Overridable output sinks.
     onStdout(_text) {},
     onStderr(_text) {},
+    // Load progress: fraction is 0..1; phase is "download" or "compile".
+    onProgress(_fraction, _phase) {},
 
     init() {
         if (state !== "uninitialized")
@@ -54,7 +65,9 @@ export const runtime = {
 
         // Single-file build: perl6.js is inlined in a <script> tag that runs
         // after this bundle — poll for evalP6 instead of injecting a src.
+        // Nothing to download, so we're straight into the compile phase.
         if (window.PERL6_EMBEDDED) {
+            runtime.onProgress(1, "compile");
             const t0 = Date.now();
             const poll = setInterval(() => {
                 if (typeof window.evalP6 === "function") {
@@ -70,35 +83,76 @@ export const runtime = {
             return;
         }
 
-        const script = document.createElement("script");
-        script.async = true;
-        script.defer = true;
-        // Order matters: 1. add to DOM, 2. set handlers, 3. set src.
-        document.head.appendChild(script);
+        // Stream the download so we can report real progress, then compile
+        // from a blob URL. A plain <script src="perl6.js"> gives no progress
+        // signal; HTTP caching (and the service worker on prod) still apply
+        // to the fetch exactly as they did to the script tag.
+        const url = `perl6.js?v=${BUILD}`;
 
         const timeoutId = setTimeout(() => {
-            changeState("error");
-            runtime.onStderr("perl6.js failed to initialize within 120 seconds");
+            if (state === "loading") {
+                changeState("error");
+                runtime.onStderr("perl6.js failed to initialize within 120 seconds");
+            }
         }, LOAD_TIMEOUT_MS);
 
-        script.onload = () => {
-            clearTimeout(timeoutId);
-            if (typeof window.evalP6 !== "function") {
+        (async () => {
+            let objectUrl = null;
+            try {
+                const res = await fetch(url);
+                if (!res.ok) throw new Error(`HTTP ${res.status}`);
+
+                // Content-Length is the compressed size when gzipped, so only
+                // trust it as the total when the body isn't content-encoded.
+                const encoded = res.headers.get("content-encoding");
+                const declared = Number(res.headers.get("content-length")) || 0;
+                const total = (!encoded && declared) ? declared : ESTIMATED_UNCOMPRESSED_BYTES;
+
+                const reader = res.body.getReader();
+                const chunks = [];
+                let received = 0;
+                for (;;) {
+                    const { done, value } = await reader.read();
+                    if (done) break;
+                    chunks.push(value);
+                    received += value.length;
+                    runtime.onProgress(Math.min(received / total, 0.99), "download");
+                }
+
+                // Download done. The synchronous compile is next and blocks the
+                // UI thread, so switch to the compile phase and yield once to
+                // let it paint before the freeze.
+                runtime.onProgress(1, "compile");
+                await new Promise((r) => setTimeout(r));
+
+                objectUrl = URL.createObjectURL(new Blob(chunks, { type: "text/javascript" }));
+                const script = document.createElement("script");
+                script.onload = () => {
+                    clearTimeout(timeoutId);
+                    URL.revokeObjectURL(objectUrl);
+                    if (typeof window.evalP6 !== "function") {
+                        changeState("error");
+                        runtime.onStderr("perl6.js loaded but window.evalP6 was not set (runtime crashed during init)");
+                        return;
+                    }
+                    evalP6 = window.evalP6;
+                    changeState("ready");
+                };
+                script.onerror = () => {
+                    clearTimeout(timeoutId);
+                    URL.revokeObjectURL(objectUrl);
+                    changeState("error");
+                    runtime.onStderr(`Failed to execute ${url}`);
+                };
+                script.src = objectUrl;
+                document.head.appendChild(script);
+            } catch (e) {
+                clearTimeout(timeoutId);
+                if (objectUrl) URL.revokeObjectURL(objectUrl);
                 changeState("error");
-                runtime.onStderr("perl6.js loaded but window.evalP6 was not set (runtime crashed during init)");
-                return;
+                runtime.onStderr(`Failed to load ${url}: ${e && e.message ? e.message : e}`);
             }
-            evalP6 = window.evalP6;
-            changeState("ready");
-        };
-
-        script.onerror = () => {
-            clearTimeout(timeoutId);
-            changeState("error");
-            runtime.onStderr(`Failed to load ${script.src}`);
-        };
-
-        script.src = "perl6.js";
+        })();
     },
 
     // Synchronous: the UI thread blocks while Raku code runs.

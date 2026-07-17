@@ -5,9 +5,13 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Raku Playground</title>
 <link rel="stylesheet" href="style.css?v=dev">
+<!-- Cache-busting build id; stamped with the commit SHA at deploy time. Set
+     before the module loads so raku-runtime.js can read it. -->
+<script>window.__BUILD__ = "dev";</script>
 <script type="module" src="playground.js?v=dev"></script>
 </head>
 <body>
+<div id="load-bar" hidden><i></i></div>
 <header>
     <h1>🦋 Raku Playground</h1>
     <div class="controls">

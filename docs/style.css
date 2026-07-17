@@ -45,12 +45,50 @@ header h1 {
     flex-wrap: wrap;
 }
 
+/* Slim top-of-page progress bar. Two modes:
+   - determinate: the runtime download (inner fill width = %);
+   - indeterminate: a run in progress (sliding stripe — a run can't report a
+     %, and this transform animation keeps moving on the compositor thread
+     even while evalP6 freezes the JS thread). */
+#load-bar {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 3px;
+    overflow: hidden;
+    transition: opacity 0.4s ease-out;
+    z-index: 1000;
+}
+#load-bar[hidden] {
+    display: block;   /* keep it laid out so we can fade it, not snap it away */
+    opacity: 0;
+}
+#load-bar > i {
+    display: block;
+    width: 0;
+    height: 100%;
+    background: #89b4fa;
+    box-shadow: 0 0 6px #89b4fa;
+    transition: width 0.2s ease-out;
+}
+#load-bar.indeterminate > i {
+    width: 30%;
+    will-change: transform;
+    animation: run-slide 1.1s ease-in-out infinite;
+}
+@keyframes run-slide {
+    from { transform: translateX(-120%); }
+    to   { transform: translateX(430%); }
+}
+
 .status {
     font-size: 0.85rem;
     opacity: 0.8;
 }
 
-.status.loading::after {
+.status.loading::after,
+.status.running::after {
     content: "";
     display: inline-block;
     width: 0.8em;

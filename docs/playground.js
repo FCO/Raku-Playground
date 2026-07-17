@@ -4,6 +4,7 @@ import { World, PRELUDE, sleep, nextLevelButton } from "./world.js";
 import { SAGAS } from "./sagas/index.js";
 
 const statusEl = document.getElementById("status");
+const loadBar = document.getElementById("load-bar");
 const runButton = document.getElementById("run");
 const stepButton = document.getElementById("step");
 const clearButton = document.getElementById("clear");
@@ -58,16 +59,28 @@ runtime.onStdout = (text) => appendOutput(text);
 runtime.onStderr = (text) => appendOutput(text.endsWith("\n") ? text : text + "\n", "stderr");
 
 const STATUS_TEXT = {
-    loading: "Loading Raku runtime (~77 MB), this takes a while…",
     ready: "Ready",
     running: "Running…",
     error: "Runtime failed to load — see output",
 };
 
+// Updated live by runtime.onProgress; shown while state === "loading".
+let loadStatus = "Starting Raku runtime…";
+
+runtime.onProgress = (fraction, phase) => {
+    loadStatus = phase === "download"
+        ? `Downloading Raku runtime… ${Math.round(fraction * 100)}%`
+        : "Compiling runtime… (first load only)";
+    loadBar.hidden = false;
+    loadBar.firstElementChild.style.width = `${Math.round(fraction * 100)}%`;
+    if (runtime.state === "loading") refreshControls();
+};
+
 function refreshControls() {
     const state = runtime.state;
     const idle = state === "ready" && !playing;
-    statusEl.textContent = playing ? "Playing…" : (STATUS_TEXT[state] ?? state);
+    const statusText = state === "loading" ? loadStatus : (STATUS_TEXT[state] ?? state);
+    statusEl.textContent = playing ? "Playing…" : statusText;
     statusEl.className = `status ${playing ? "running" : state}`;
     runButton.disabled = !idle;
     runButton.textContent = state === "loading" ? "Loading…" : "Run";
@@ -75,6 +88,18 @@ function refreshControls() {
     // switching level or saga mid-run would tangle playback, progress and UI state
     sagaSelect.disabled = playing;
     levelSelect.disabled = playing;
+    // Progress bar: during loading, onProgress owns it (determinate download).
+    // Otherwise show an indeterminate sliding stripe while a run is in flight.
+    if (state !== "loading") {
+        if (playing) {
+            loadBar.firstElementChild.style.width = "";  // let CSS size the stripe
+            loadBar.classList.add("indeterminate");
+            loadBar.hidden = false;
+        } else {
+            loadBar.hidden = true;
+            loadBar.classList.remove("indeterminate");
+        }
+    }
 }
 
 runtime.onStateChange(() => refreshControls());
@@ -492,3 +517,14 @@ window.__playground = {
 
 setSaga(SAGAS[0].id);
 runtime.init();
+
+// Cache the 77 MB runtime across visits with a service worker — but only on a
+// real (https) deployment. Localhost is excluded so the dev server and the
+// Playwright suite (which loads a fresh page per spec) never hit a stale
+// cache; file:// (the single-file build) is excluded for the same reason.
+if ("serviceWorker" in navigator
+    && location.protocol === "https:"
+    && !/^(localhost|127\.|\[?::1)/.test(location.hostname)) {
+    const build = window.__BUILD__ || "dev";
+    navigator.serviceWorker.register(`sw.js?v=${build}`).catch(() => { /* caching is best-effort */ });
+}
