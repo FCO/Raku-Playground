@@ -218,9 +218,10 @@ const LEVELS = [
         hint: "say \"count = $m<count>\"; say \"what = $m<what>\";",
         solution: `my $text = "42 gems";\nmy grammar Loot {\n    token TOP   { <count> \\s+ <what> }\n    token count { \\d+ }\n    token what  { \\w+ }\n}\nmy $m = Loot.parse($text);\nsay "count = $m<count>";\nsay "what = $m<what>";`,
         check(preview, ctx) {
-            return /count = 42/.test(ctx.output) && /what\s*= gems/.test(ctx.output)
+            // formatting is free — both parsed values must appear in the output
+            return /\b42\b/.test(ctx.output) && /gems/.test(ctx.output)
                 ? { success: true }
-                : { success: false, message: "expected the output to show count = 42 and what = gems" };
+                : { success: false, message: "print both parsed parts — the output should contain 42 and gems (any format)" };
         },
     },
     {
@@ -247,9 +248,11 @@ const LEVELS = [
         hint: "say \"{+$m<gem>} gems\"; say $m<gem>».Str.join(\" / \");",
         solution: `my $text = "ruby,emerald,sapphire,topaz";\nmy grammar GemList {\n    token TOP { <gem>+ % ',' }\n    token gem { \\w+ }\n}\nmy $m = GemList.parse($text);\nsay "{+$m<gem>} gems";\nsay $m<gem>».Str.join(" / ");`,
         check(preview, ctx) {
-            return /4 gems/.test(ctx.output) && /ruby \/ emerald \/ sapphire \/ topaz/.test(ctx.output)
+            // any separator/format is fine — the count and all four names must show up
+            const names = ["ruby", "emerald", "sapphire", "topaz"];
+            return /\b4\b/.test(ctx.output) && names.every((n) => ctx.output.includes(n))
                 ? { success: true }
-                : { success: false, message: "expected “4 gems” and the four names joined with “ / ”" };
+                : { success: false, message: "the output should contain the count (4) and all four gem names — any format you like" };
         },
     },
     {
@@ -277,9 +280,10 @@ const LEVELS = [
         hint: "method TOP($/) { make [+] $<lot>».made }",
         solution: `my $text = "3 rubies, 2 emeralds, 7 opals";\nmy grammar Inventory {\n    token TOP { <lot>+ % ', ' }\n    token lot { $<n>=[\\d+] \\s+ $<gem>=[\\w+] }\n}\nmy class Tally {\n    method lot($/) { make +$<n> }\n    method TOP($/) { make [+] $<lot>».made }\n}\nmy $m = Inventory.parse($text, :actions(Tally));\nsay "total gems: {$m.made}";`,
         check(preview, ctx) {
-            return /total gems: 12/.test(ctx.output)
+            // wording is yours — the computed total must appear
+            return /\b12\b/.test(ctx.output)
                 ? { success: true }
-                : { success: false, message: "expected “total gems: 12” — 3 + 2 + 7" };
+                : { success: false, message: "print the total the actions computed — 3 + 2 + 7 = 12 should appear in the output" };
         },
     },
 ];

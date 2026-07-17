@@ -232,15 +232,16 @@ const LEVELS = [
         hint: "h1({ \"Clicks: $!count\" }), button(\"click me\", :event{ :click{ $!count++; self.call-render } })",
         solution: `my class App does Tag {\n    has Int $.count = 0;\n\n    method render {\n        div(\n            h1({ "Clicks: $!count" }),\n            button(\n                "click me",\n                :event{ :click{ $!count++; self.call-render } },\n            ),\n        )\n    }\n}\nApp.new.mount-on: preview;`,
         check(preview) {
+            // wording is free — the heading must show the count and update on click
             const h = preview.querySelector("h1");
             const btn = preview.querySelector("button, input[type=button]");
-            if (!h || !btn) return { success: false, message: "need an h1 and a button" };
-            if (!/Clicks: 0/.test(h.textContent))
-                return { success: false, message: "the h1 should start at “Clicks: 0”" };
+            if (!h || !btn) return { success: false, message: "need an h1 (the counter) and a button" };
+            if (!/\b0\b/.test(h.textContent))
+                return { success: false, message: "the h1 should show the starting count, 0 (any wording)" };
             btn.click();
-            return /Clicks: 1/.test(preview.querySelector("h1").textContent)
+            return /\b1\b/.test(preview.querySelector("h1").textContent)
                 ? { success: true }
-                : { success: false, message: "clicking the button should update the h1 to “Clicks: 1”" };
+                : { success: false, message: "clicking the button should make the h1 show 1 — increment $!count and call-render" };
         },
     },
     {
