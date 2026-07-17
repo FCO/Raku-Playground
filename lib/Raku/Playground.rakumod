@@ -30,7 +30,10 @@ site under C<docs/>, ready for GitHub Pages.
 Guide Camelia 🦋 through I<sagas> — sets of levels. The 16-level
 I<Learn Raku> saga is a guided tour of Raku syntax (statements, C<xx>,
 C<for>, C<until>, conditionals, subs, C<given>/C<when>, named parameters,
-C<with> and more) with rich explanations on every level;
+C<with> and more) with rich explanations on every level; five reference
+sagas cover I<Quoting Constructs>, I<Data Structures>, I<Containers>,
+I<Types & the MOP> and I<Phasers>, following the pages at
+L<docs.raku.org/reference|https://docs.raku.org/reference>;
 I<Regexes & Grammars> covers Raku's crown jewels — from C</gem/> to
 grammars with actions, with every match highlighted live in the preview
 pane; I<Build Websites> teaches
