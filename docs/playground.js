@@ -236,7 +236,7 @@ function showDomResult() {
     const idx = Number(currentLevel);
     let res;
     try {
-        res = domLevel.check(previewEl);
+        res = domLevel.check(previewEl, { output: outputEl.innerText });
     } catch (e) {
         res = { success: false, message: String(e) };
     }
@@ -275,7 +275,24 @@ function showInstructions(level) {
     hintButton.hidden = !level.hint;
 }
 
-// paragraphs of plain text; `backticked` fragments become <code>
+// paragraphs of plain text; `code`, **bold** and *italic* markers supported
+function renderInline(el, text) {
+    for (const part of text.split(/(\*\*[^*]+\*\*|\*[^*]+\*)/)) {
+        if (!part) continue;
+        if (part.startsWith("**") && part.endsWith("**")) {
+            const b = document.createElement("strong");
+            b.textContent = part.slice(2, -2);
+            el.appendChild(b);
+        } else if (part.startsWith("*") && part.endsWith("*") && part.length > 2) {
+            const i = document.createElement("em");
+            i.textContent = part.slice(1, -1);
+            el.appendChild(i);
+        } else {
+            el.appendChild(document.createTextNode(part));
+        }
+    }
+}
+
 function renderExplain(paragraphs) {
     const box = document.getElementById("lvl-explain");
     box.replaceChildren(...(paragraphs ?? []).map((para) => {
@@ -286,7 +303,7 @@ function renderExplain(paragraphs) {
                 c.textContent = part;
                 p.appendChild(c);
             } else if (part) {
-                p.appendChild(document.createTextNode(part));
+                renderInline(p, part);
             }
         });
         return p;

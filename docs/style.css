@@ -194,6 +194,23 @@ main {
     border-bottom: 1px solid #313244;
 }
 
+#preview .rx-specimen {
+    white-space: pre-wrap;
+    word-break: break-word;
+    font-family: ui-monospace, "SF Mono", Menlo, monospace;
+    font-size: 15px;
+    line-height: 1.9;
+    margin: 0;
+}
+
+#preview mark {
+    background: #f9e2af;
+    color: #1e1e2e;
+    padding: 0.1em 0.25em;
+    border-radius: 4px;
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.25);
+}
+
 #preview:empty::before {
     content: "Preview — Raku code can render here:\A my \\preview = EVAL :lang<JavaScript>, 'return PREVIEW';";
     white-space: pre-wrap;

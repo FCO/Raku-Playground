@@ -30,8 +30,11 @@ site under C<docs/>, ready for GitHub Pages.
 Guide Camelia 🦋 through I<sagas> — sets of levels. The 16-level
 I<Learn Raku> saga is a guided tour of Raku syntax (statements, C<xx>,
 C<for>, C<until>, conditionals, subs, C<given>/C<when>, named parameters,
-C<with> and more) with rich explanations on every level; I<Build Websites>
-teaches L<MemoizedDOM|https://github.com/FCO/MemoizedDOM> — declarative,
+C<with> and more) with rich explanations on every level;
+I<Regexes & Grammars> covers Raku's crown jewels — from C</gem/> to
+grammars with actions, with every match highlighted live in the preview
+pane; I<Build Websites> teaches
+L<MemoizedDOM|https://github.com/FCO/MemoizedDOM> — declarative,
 memoized web pages in Raku, rendered live in the preview pane; I<Gem Rush>
 adds challenge islands. Locked progression per saga, adjustable playback
 speed, step-through, and a click-and-drag 3D world. New sagas are single

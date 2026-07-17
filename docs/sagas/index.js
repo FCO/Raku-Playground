@@ -3,11 +3,13 @@
 // format) and import it here — that's the whole procedure.
 
 import learnRaku from "./learn-raku.js";
+import grammars from "./grammars.js";
 import memoizedDom from "./memoized-dom.js";
 import gemRush from "./gem-rush.js";
 
 export const SAGAS = [
     learnRaku,
+    grammars,
     memoizedDom,
     gemRush,
 ];
