@@ -469,11 +469,55 @@ async function stepCode() {
 
 // ---------- editor / wiring ----------
 
+const INDENT = "    "; // 4 spaces
+
+// Tab / Shift-Tab indentation. Empty or single-line selection: Tab inserts
+// spaces at the cursor. Any multi-line selection, and all dedents, operate
+// line-by-line on every line the selection touches.
+function changeIndent(view, dedent) {
+    const { state } = view;
+    const multiline = state.selection.ranges.some(
+        (r) => state.doc.lineAt(r.from).number !== state.doc.lineAt(r.to).number
+    );
+    if (!dedent && !multiline) {
+        view.dispatch(state.update(state.replaceSelection(INDENT), {
+            scrollIntoView: true,
+            userEvent: "input",
+        }));
+        return true;
+    }
+    const lines = new Set();
+    for (const r of state.selection.ranges) {
+        const from = state.doc.lineAt(r.from).number;
+        const to = state.doc.lineAt(r.to).number;
+        for (let n = from; n <= to; n++) lines.add(n);
+    }
+    const changes = [];
+    for (const n of lines) {
+        const line = state.doc.line(n);
+        if (dedent) {
+            const m = /^(?: {1,4}|\t)/.exec(line.text); // strip up to 4 spaces or one tab
+            if (m) changes.push({ from: line.from, to: line.from + m[0].length });
+        } else {
+            changes.push({ from: line.from, insert: INDENT });
+        }
+    }
+    if (changes.length)
+        view.dispatch(state.update({ changes, userEvent: dedent ? "delete.dedent" : "input.indent" }));
+    return true; // always consume Tab/Shift-Tab so focus stays in the editor
+}
+
 const editor = new EditorView({
     doc: SAMPLE,
     parent: document.getElementById("editor"),
     extensions: [
-        keymap.of([{ key: "Mod-Enter", run: () => { runCode(); return true; } }]),
+        keymap.of([
+            { key: "Mod-Enter", run: () => { runCode(); return true; } },
+            { key: "Tab", run: (view) => changeIndent(view, false) },
+            { key: "Shift-Tab", run: (view) => changeIndent(view, true) },
+            // accessibility escape hatch: Tab is captured, so Escape releases focus
+            { key: "Escape", run: (view) => { view.contentDOM.blur(); return true; } },
+        ]),
         basicSetup,
         StreamLanguage.define(perl),
         oneDark,
