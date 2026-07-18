@@ -59,20 +59,6 @@ self.PG = {
     query: (name) => (sim ? sim.query(name) : 0),
 };
 
-// The first evalP6 after boot pays a large one-time cost: V8 JIT of the
-// just-loaded 77MB script, plus spinning up the EVAL / MONKEY-SEE-NO-EVAL
-// compiler machinery the puzzle & grammars preludes use. Pay it here, during
-// the visible loading phase and before we signal `ready`, so it stays off the
-// user's first Run — which would otherwise race the 30s wall-clock guard (see
-// raku-runtime.js) and get killed mid-compile. Errors are swallowed: a warmup
-// failure must never strand the runtime in `loading`. `running` is still false
-// (no stray stderr forwarded) and `sim` is null (so we steer clear of self.PG).
-function warmup() {
-    try {
-        self.evalP6("use MONKEY-SEE-NO-EVAL; my $ = EVAL(q/1/, :lang<JavaScript>);");
-    } catch (_) { /* ignore — signal ready regardless */ }
-}
-
 async function load() {
     try {
         // Single-file build: world-sim.js and perl6.js are concatenated into
@@ -84,7 +70,6 @@ async function load() {
             const poll = setInterval(() => {
                 if (typeof self.evalP6 === "function") {
                     clearInterval(poll);
-                    warmup();
                     self.postMessage({ type: "ready" });
                 } else if (Date.now() - t0 > 120_000) {
                     clearInterval(poll);
@@ -124,7 +109,6 @@ async function load() {
 
         if (typeof self.evalP6 !== "function")
             throw new Error("perl6.js loaded but evalP6 was not defined");
-        warmup();
         self.postMessage({ type: "ready" });
     } catch (e) {
         self.postMessage({ type: "load-error", message: String(e && (e.stack || e.message || e)) });

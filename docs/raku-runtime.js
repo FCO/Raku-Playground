@@ -12,6 +12,16 @@ const BUILD = (typeof window !== "undefined" && window.__BUILD__) || "dev";
 // forever (the per-command guard never trips). The UI stays live, but auto-kill
 // the zombie so a forgotten tab doesn't leak a busy thread.
 const RUN_TIMEOUT_MS = 30_000;
+// The *first* run on a freshly spawned worker also pays a large one-time compile
+// warmup (V8 JIT of the 77MB script + the EVAL / MONKEY-SEE-NO-EVAL machinery
+// the puzzle & grammars preludes use). On slow devices (phones) that alone can
+// approach 30s, so a legitimate first run — one that's merely compiling, not
+// looping — would be killed by the normal guard. Give it a generous budget; the
+// Stop button still interrupts instantly, and warm runs revert to RUN_TIMEOUT_MS.
+const FIRST_RUN_TIMEOUT_MS = 120_000;
+// False until a run has completed on the current worker; reset by cancel()'s
+// respawn (a fresh worker is cold again). Gates which budget `run` uses.
+let warmedUp = false;
 
 // perl6.js emits HTML through NQP_STDOUT (entity-encoded text, ANSI colors as
 // <span>s — e.g. compile errors). The worker can't decode it (no DOMParser), so
@@ -57,6 +67,7 @@ function spawn() {
                     const p = pending;
                     pending = null;
                     clearTimeout(p.timer);
+                    warmedUp = true; // this worker has compiled once; later runs are warm
                     changeState("ready");
                     p.resolve(m.result);
                 }
@@ -96,11 +107,12 @@ export const runtime = {
         changeState("running");
         return new Promise((resolve) => {
             const id = ++runSeq;
+            const budget = warmedUp ? RUN_TIMEOUT_MS : FIRST_RUN_TIMEOUT_MS;
             const timer = setTimeout(() => {
-                runtime.onStderr(`Run exceeded ${RUN_TIMEOUT_MS / 1000}s — stopped.`);
+                runtime.onStderr(`Run exceeded ${budget / 1000}s — stopped.`);
                 runtime.cancel();
                 if (pending && pending.id === id) { pending = null; resolve(null); }
-            }, RUN_TIMEOUT_MS);
+            }, budget);
             pending = { id, resolve, timer };
             worker.postMessage({ type: "run", id, source, level });
         });
@@ -110,6 +122,7 @@ export const runtime = {
     // bring a fresh runtime back up. Powers the Stop button and the timeout.
     cancel() {
         if (worker) worker.terminate();
+        warmedUp = false; // the respawned worker is cold — first run gets the big budget again
         // Resolve the in-flight run (with null) so awaiting UI code unblocks and
         // animates whatever streamed before the kill.
         if (pending) { clearTimeout(pending.timer); const p = pending; pending = null; p.resolve(null); }
