@@ -2,6 +2,7 @@ import { EditorView, basicSetup, keymap, StreamLanguage, perl, oneDark } from ".
 import { runtime } from "./raku-runtime.js";
 import { World, PRELUDE, sleep, nextLevelButton } from "./world.js";
 import { SAGAS } from "./sagas/index.js";
+import { startTour, maybeAutoStartTour } from "./tour.js";
 
 const statusEl = document.getElementById("status");
 const loadBar = document.getElementById("load-bar");
@@ -10,6 +11,7 @@ const stopButton = document.getElementById("stop");
 const stepButton = document.getElementById("step");
 const clearButton = document.getElementById("clear");
 const hintButton = document.getElementById("hint-btn");
+const helpButton = document.getElementById("help");
 const sagaSelect = document.getElementById("saga");
 const levelSelect = document.getElementById("level");
 const speedSelect = document.getElementById("speed");
@@ -507,6 +509,7 @@ clearButton.addEventListener("click", () => { outputEl.textContent = ""; });
 hintButton.addEventListener("click", () => {
     document.getElementById("lvl-hint").hidden = false;
 });
+helpButton.addEventListener("click", () => startTour());
 
 // Exposed for scripted testing.
 window.__playground = {
@@ -521,9 +524,11 @@ window.__playground = {
     sagas: SAGAS,
     get levels() { return currentSaga.levels; },
     progress: () => [...progress],
+    startTour,
 };
 
 setSaga(SAGAS[0].id);
+maybeAutoStartTour();  // first-time visitors get the tour while the runtime loads
 runtime.init();
 
 // Cache the 77 MB runtime across visits with a service worker — but only on a

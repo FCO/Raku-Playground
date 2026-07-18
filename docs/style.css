@@ -686,3 +686,123 @@ main {
     #editor { min-height: 8.5rem; }   /* room to actually type a program */
     #editor .cm-editor { font-size: 13px; }
 }
+
+/* ---------- onboarding tour (docs/tour.js) ---------- */
+
+/* Small round replay button in the header. */
+#help {
+    padding: 0.3rem 0.6rem;
+    font-weight: 700;
+    line-height: 1;
+    border-radius: 50%;
+}
+
+/* The scrim/spotlight sit above everything (#load-bar is z-index:1000). */
+.tour-root {
+    position: fixed;
+    inset: 0;
+    z-index: 2000;
+}
+
+/* The dimmer is the hole's giant box-shadow — everything outside it is dark,
+   the hole itself is clear. It glides between targets. */
+.tour-hole {
+    position: fixed;
+    border-radius: 8px;
+    box-shadow: 0 0 0 9999px rgba(17, 17, 27, 0.72);
+    outline: 2px solid #89b4fa;
+    transition: left 0.25s ease, top 0.25s ease, width 0.25s ease, height 0.25s ease;
+    pointer-events: none;
+}
+
+/* Null-target steps dim the whole screen (no hole) and center the card. */
+.tour-centered::before {
+    content: "";
+    position: fixed;
+    inset: 0;
+    background: rgba(17, 17, 27, 0.72);
+}
+
+.tour-card {
+    position: fixed;
+    width: min(320px, calc(100vw - 24px));
+    background: #181825;
+    color: #cdd6f4;
+    border: 1px solid #313244;
+    border-radius: 10px;
+    padding: 0.9rem 1rem 0.8rem;
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+}
+
+.tour-centered .tour-card {
+    left: 50%;
+    top: 50%;
+    transform: translate(-50%, -50%);
+}
+
+.tour-counter {
+    font-size: 0.72rem;
+    letter-spacing: 0.04em;
+    color: #6c7086;
+    margin-bottom: 0.25rem;
+}
+
+.tour-title {
+    margin: 0 0 0.35rem;
+    font-size: 1.02rem;
+    color: #89b4fa;
+}
+
+.tour-body {
+    margin: 0 0 0.85rem;
+    font-size: 0.9rem;
+    line-height: 1.45;
+    color: #bac2de;
+}
+
+.tour-body code {
+    background: #313244;
+    color: #89dceb;
+    padding: 0 0.25em;
+    border-radius: 4px;
+}
+
+.tour-buttons {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.tour-spacer { flex: 1; }
+
+.tour-skip {
+    background: none;
+    border: none;
+    color: #6c7086;
+    padding: 0.3rem 0.2rem;
+}
+.tour-skip:hover:not(:disabled) { background: none; color: #cdd6f4; }
+
+.tour-next {
+    background: #a6e3a1;
+    border-color: #a6e3a1;
+    color: #1e1e2e;
+    font-weight: 600;
+}
+.tour-next:hover:not(:disabled) { background: #b6ecb0; }
+
+@media (max-width: 700px) {
+    /* Pin the card to the bottom so it never covers the spotlit control. */
+    .tour-card {
+        left: 12px;
+        right: 12px;
+        bottom: 12px;
+        top: auto !important;
+        width: auto;
+    }
+    .tour-centered .tour-card {
+        left: 12px;
+        top: auto;
+        transform: none;
+    }
+}

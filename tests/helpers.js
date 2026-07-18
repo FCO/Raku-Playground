@@ -8,7 +8,12 @@ const idle = () =>
 // Fresh page: navigate, wipe stored progress, wait for the runtime.
 async function boot(page) {
     await page.goto("/", { waitUntil: "domcontentloaded" });
-    await page.evaluate(() => localStorage.clear());
+    await page.evaluate(() => {
+        localStorage.clear();
+        // Suppress the first-run onboarding tour (docs/tour.js) — its overlay
+        // would cover the UI these specs click. tests/tour.spec.js drives it.
+        localStorage.setItem("raku-playground-tour-seen", "1");
+    });
     await page.reload({ waitUntil: "domcontentloaded" });
     await page.waitForFunction(
         () => window.__playground && window.__playground.runtime.state === "ready",
