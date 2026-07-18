@@ -1,4 +1,7 @@
-import { EditorView, basicSetup, keymap, StreamLanguage, perl, oneDark } from "./vendor/codemirror.js";
+import {
+    EditorView, basicSetup, keymap, Compartment,
+    createHighlighterCore, createJavaScriptRegexEngine, shikiExt, synchronousHighlightEffect, rakuLang, THEMES,
+} from "./vendor/codemirror.js";
 import { runtime } from "./raku-runtime.js";
 import { World, PRELUDE, sleep, nextLevelButton } from "./world.js";
 import { SAGAS } from "./sagas/index.js";
@@ -507,6 +510,10 @@ function changeIndent(view, dedent) {
     return true; // always consume Tab/Shift-Tab so focus stays in the editor
 }
 
+// Shiki owns highlighting + theme (colors and editor background), swapped in
+// via this compartment once the highlighter has built (it loads async).
+const themeCompartment = new Compartment();
+
 const editor = new EditorView({
     doc: SAMPLE,
     parent: document.getElementById("editor"),
@@ -519,10 +526,85 @@ const editor = new EditorView({
             { key: "Escape", run: (view) => { view.contentDOM.blur(); return true; } },
         ]),
         basicSetup,
-        StreamLanguage.define(perl),
-        oneDark,
+        themeCompartment.of([]),  // filled in once the Shiki highlighter is ready
     ],
 });
+
+// ---------- Raku highlighting + theme chooser (Shiki) ----------
+
+const THEME_KEY = "raku-playground-theme";
+let themeId = storageGet(THEME_KEY);
+if (!themeId || !THEMES[themeId]) themeId = Object.keys(THEMES)[0]; // default = first (One Dark Pro)
+
+// Build the highlighter once (real Raku TextMate grammar via the JS regex
+// engine — forgiving so any oniguruma-only pattern can't hard-fail the load).
+// We pass the *promise* to codemirror-shiki: given a Promise it defers its
+// first dispatch to a microtask, so installing the extension mid-update (a
+// compartment reconfigure) can't trigger "update in progress".
+const highlighterReady = createHighlighterCore({
+    langs: [rakuLang],
+    themes: Object.values(THEMES).map((t) => t.theme),
+    engine: createJavaScriptRegexEngine({ forgiving: true }),
+});
+highlighterReady.then((h) => { window.__rakuHighlighter = h; }); // exposed for scripted testing
+
+// Populate the toolbar chooser from the bundled themes.
+const themeSelect = document.getElementById("theme");
+themeSelect.replaceChildren(...Object.entries(THEMES).map(([id, { label }]) => {
+    const opt = document.createElement("option");
+    opt.value = id;
+    opt.textContent = label;
+    return opt;
+}));
+themeSelect.value = themeId;
+themeSelect.addEventListener("change", () => applyTheme(themeSelect.value));
+
+// Shiki only colours tokens; the editor chrome (background, gutter, line
+// numbers, active line, cursor, selection) is themed from the Shiki theme's
+// own editor `colors` so the whole pane follows the chosen theme.
+function editorTheme(id) {
+    const t = THEMES[id].theme;
+    const c = t.colors ?? {};
+    const bg = c["editor.background"];
+    return EditorView.theme({
+        "&": { backgroundColor: bg, color: c["editor.foreground"] },
+        ".cm-gutters": {
+            backgroundColor: c["editorGutter.background"] ?? bg,
+            color: c["editorLineNumber.foreground"],
+            border: "none",
+        },
+        ".cm-activeLineGutter": {
+            color: c["editorLineNumber.activeForeground"] ?? c["editor.foreground"],
+            backgroundColor: c["editor.lineHighlightBackground"] ?? "transparent",
+        },
+        ".cm-activeLine": { backgroundColor: c["editor.lineHighlightBackground"] ?? "transparent" },
+        ".cm-cursor, .cm-dropCursor": { borderLeftColor: c["editorCursor.foreground"] ?? c["editor.foreground"] },
+        "&.cm-focused .cm-selectionBackground, .cm-selectionBackground, .cm-content ::selection": {
+            backgroundColor: c["editor.selectionBackground"] ?? "#3a3d41",
+        },
+    }, { dark: t.type !== "light" });
+}
+
+function applyTheme(id) {
+    if (!THEMES[id]) return;
+    themeId = id;
+    themeSelect.value = id;
+    storageSet(THEME_KEY, id);
+    editor.dispatch({
+        effects: [
+            themeCompartment.reconfigure([
+                shikiExt({ highlighter: highlighterReady, language: "raku", theme: id }),
+                editorTheme(id),
+            ]),
+            // codemirror-shiki caches tokens per line and skips re-tokenising a
+            // line whose range is unchanged — so a theme switch alone only
+            // recolours the cursor line. This effect forces a full re-highlight.
+            synchronousHighlightEffect.of(null),
+        ],
+    });
+}
+
+applyTheme(themeId); // installs highlighting now; it colors once the highlighter resolves
 
 sagaSelect.replaceChildren(
     ...SAGAS.map((saga) => {
