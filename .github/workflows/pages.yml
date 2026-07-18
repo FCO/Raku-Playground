@@ -27,9 +27,9 @@ jobs:
         run: |
           sed -i "s/?v=dev/?v=${GITHUB_SHA::8}/g" docs/index.html
           sed -i "s/__BUILD__ = \"dev\"/__BUILD__ = \"${GITHUB_SHA::8}\"/" docs/index.html
-      - uses: actions/configure-pages@v5
-      - uses: actions/upload-pages-artifact@v4
+      - uses: actions/configure-pages@v6
+      - uses: actions/upload-pages-artifact@v5
         with:
           path: docs
       - id: deployment
-        uses: actions/deploy-pages@v4
+        uses: actions/deploy-pages@v5
