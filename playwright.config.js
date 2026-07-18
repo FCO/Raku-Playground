@@ -7,12 +7,14 @@ const { defineConfig } = require("@playwright/test");
 
 module.exports = defineConfig({
     testDir: "tests",
-    timeout: 360_000,        // the 77MB runtime takes a while on first load
+    timeout: 600_000,        // 77MB runtime + Web Worker execution under CI contention
     expect: { timeout: 15_000 },
-    // The runtime runs in a Web Worker, so each browser now has two hot threads
-    // (page + worker). Running 3 browsers at once oversubscribes CI's 2 cores
-    // and slows every run ~5x, so go single-file on CI; keep parallelism locally.
-    workers: process.env.CI ? 1 : 3,
+    // One browser per spec file (each afterAll closes its own browser — sharing
+    // one browser across files would let the first teardown close it for the
+    // rest). The runtime now runs in a Web Worker, so 3 browsers on CI's 2 cores
+    // contend and run slower; the generous timeout above and interval polling in
+    // waitIdle (not frame-rate, which steals cycles from the worker) absorb it.
+    workers: 3,
     reporter: [["list"]],
     forbidOnly: !!process.env.CI,
     use: {
