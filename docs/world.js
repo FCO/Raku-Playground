@@ -1,19 +1,19 @@
-// The puzzle world: levels, simulation, Raku command prelude, renderer and
-// playback engine. Commands are *recorded* while the (synchronous) Raku eval
-// runs — the JS sim advances instantly and answers queries — then played back
-// as animations afterwards, because nothing can paint while evalP6 blocks.
+// The puzzle world: the Raku command prelude, renderer and playback engine.
+// The simulation now runs in the Web Worker (docs/world-sim.js) alongside
+// Rakudo; it streams recorded commands here, which this replays as animations.
+// (World keeps no live sim — reset/render/playback consume `commands` and the
+// final `result` the worker sends.)
 
 const TILE = 64;
-const COMMAND_LIMIT = 1000;
 
+// Only the render half needs directions (with the sprite rotation `deg`); the
+// turn/movement logic lives in the worker sim (docs/world-sim.js).
 const DIRS = {
     N: { dx: 0, dy: -1, deg: 270 },
     E: { dx: 1, dy: 0, deg: 0 },
     S: { dx: 0, dy: 1, deg: 90 },
     W: { dx: -1, dy: 0, deg: 180 },
 };
-const LEFT_OF = { N: "W", W: "S", S: "E", E: "N" };
-const RIGHT_OF = { N: "E", E: "S", S: "W", W: "N" };
 
 // Single line on purpose: user code starts on line 2, so compile-error line
 // numbers are off by exactly one (documented). Queries compare == 1 because
@@ -58,91 +58,12 @@ export class World {
     // ---------- simulation / recording ----------
 
     reset() {
-        const { x, y, facing } = this.level.start;
-        this.sim = { x, y, facing, dead: false, collected: 0, gems: new Set() };
-        this.level.grid.forEach((row, gy) => {
-            [...row].forEach((ch, gx) => {
-                if (ch === "G") this.sim.gems.add(`${gx},${gy}`);
-            });
-        });
-        this.commands = [];
+        const { facing } = this.level.start;
+        this.commands = [];       // filled from the worker's streamed commands
         this.playIndex = 0;
-        this.issued = 0;
         this.arrowFacing = facing;
         this.shownCollected = 0;
-    }
-
-    tileAt(x, y) {
-        return this.level.grid[y]?.[x] ?? " ";
-    }
-
-    walkable(x, y) {
-        return "#G".includes(this.tileAt(x, y)) ||
-            (x === this.level.start.x && y === this.level.start.y);
-    }
-
-    command(name) {
-        // count every issued command, including ones dropped after a fall —
-        // otherwise a post-fall loop records nothing and spins forever
-        if (++this.issued > COMMAND_LIMIT)
-            throw new Error(`Runaway program: more than ${COMMAND_LIMIT} commands issued`);
-        if (this.sim.dead) return;
-        const s = this.sim;
-        switch (name) {
-            case "move-forward": {
-                const { dx, dy } = DIRS[s.facing];
-                const [tx, ty] = [s.x + dx, s.y + dy];
-                if (this.walkable(tx, ty)) {
-                    s.x = tx; s.y = ty;
-                    this.commands.push({ name, x: tx, y: ty });
-                } else if (this.tileAt(tx, ty) === "W") {
-                    this.commands.push({ name, bump: true, facing: s.facing });
-                } else {
-                    s.dead = true;
-                    this.commands.push({ name, fall: true, x: tx, y: ty });
-                }
-                break;
-            }
-            case "turn-left":
-            case "turn-right":
-                s.facing = (name === "turn-left" ? LEFT_OF : RIGHT_OF)[s.facing];
-                this.commands.push({ name, facing: s.facing });
-                break;
-            case "collect-gem": {
-                const key = `${s.x},${s.y}`;
-                if (s.gems.has(key)) {
-                    s.gems.delete(key);
-                    s.collected++;
-                    this.commands.push({ name, got: true, x: s.x, y: s.y });
-                } else {
-                    this.commands.push({ name, got: false, x: s.x, y: s.y });
-                }
-                break;
-            }
-            default:
-                throw new Error(`Unknown command: ${name}`);
-        }
-    }
-
-    query(name) {
-        const s = this.sim;
-        const facingFor = {
-            "is-blocked": s.facing,
-            "is-blocked-left": LEFT_OF[s.facing],
-            "is-blocked-right": RIGHT_OF[s.facing],
-        }[name];
-        if (facingFor) {
-            const { dx, dy } = DIRS[facingFor];
-            return this.walkable(s.x + dx, s.y + dy) ? 0 : 1;
-        }
-        if (name === "is-on-gem") return s.gems.has(`${s.x},${s.y}`) ? 1 : 0;
-        if (name === "gems-left") return s.gems.size;
-        throw new Error(`Unknown query: ${name}`);
-    }
-
-    result() {
-        if (this.sim.dead) return { success: false, fell: true };
-        return { success: this.sim.collected === this.totalGems, fell: false };
+        this.finalResult = null;  // the worker's result, set before playback
     }
 
     // ---------- rendering ----------
@@ -332,16 +253,18 @@ export class World {
     }
 
     finish() {
-        const { success, fell } = this.result();
-        const left = this.totalGems - this.sim.collected;
-        this.banner.textContent = fell
+        const res = this.finalResult ?? { success: false, fell: false, collected: this.shownCollected };
+        const left = this.totalGems - (res.collected ?? this.shownCollected);
+        this.banner.textContent = res.fell
             ? "💦 Splash! Camelia fell in the water. Try again!"
-            : success
+            : res.success
                 ? "Congratulations! 🎉 All gems collected!"
                 : `${left} 💎 left — try again!`;
-        this.banner.className = `banner ${success ? "success" : "failure"}`;
-        if (success && this.onNext) this.banner.append(" ", nextLevelButton(() => this.onNext()));
+        this.banner.className = `banner ${res.success ? "success" : "failure"}`;
+        if (res.success && this.onNext) this.banner.append(" ", nextLevelButton(() => this.onNext()));
         this.banner.hidden = false;
-        this.onFinished?.(this.result());
+        // Expose the final sim snapshot (tests read world.sim.{x,y,dead,collected}).
+        this.sim = res;
+        this.onFinished?.(res);
     }
 }

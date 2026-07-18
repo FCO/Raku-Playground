@@ -3,27 +3,18 @@
 // (the prelude's show-matches helper renders through window.RX_RENDER), and
 // checks verify both the highlighted marks and the printed output.
 
-// The prelude renders the highlighted specimen through direct DOM calls
-// (createElement/createTextNode/appendChild) — the same Raku↔JS channel the
-// MemoizedDOM saga uses; passing Raku strings to arbitrary JS functions is
-// NOT reliable in rakudo.js, but DOM method arguments are.
+// The runtime runs in a Web Worker (no DOM), so show-matches can't build the
+// highlight itself. It matches in pure Raku, then emits the specimen + match
+// ranges on a sentinel stdout line ("@@RX@@<codepoints>@<from,to;…>") that the
+// worker turns into a render message; the main thread draws the <pre>/<mark>s
+// (see renderMatches in playground.js). Marker/delimiter are ASCII (NQP_STDOUT
+// HTML-encodes non-ASCII); the payload is codepoints/integers — the one Raku→JS
+// channel that's reliable here (arbitrary string args are not). The
+// human-readable summary is a normal `say`.
 const PRELUDE = `
-my \\JSDOC = EVAL :lang<JavaScript>, 'return document';
-my \\PREVIEW-EL = EVAL :lang<JavaScript>, 'return PREVIEW';
 sub show-matches(Str $text, $rx) {
     my @m = $text.match($rx, :g);
-    my \\pre = JSDOC.createElement('pre');
-    my $ = pre.setAttribute('class', 'rx-specimen');
-    my $pos = 0;
-    for @m -> $m {
-        my $ = pre.appendChild(JSDOC.createTextNode($text.substr($pos, $m.from - $pos))) if $m.from > $pos;
-        my \\marked = JSDOC.createElement('mark');
-        my $ = marked.appendChild(JSDOC.createTextNode($m.Str));
-        my $ = pre.appendChild(marked);
-        $pos = $m.to;
-    }
-    my $ = pre.appendChild(JSDOC.createTextNode($text.substr($pos))) if $pos < $text.chars;
-    my $ = PREVIEW-EL.appendChild(pre);
+    say '@@RX@@' ~ $text.ords.join(',') ~ '@' ~ @m.map({ .from ~ ',' ~ .to }).join(';');
     say @m ?? "{+@m} match{+@m == 1 ?? '' !! 'es'}: " ~ @m».Str.join(' | ') !! 'no matches';
     @m
 }
