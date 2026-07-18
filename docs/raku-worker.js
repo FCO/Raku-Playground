@@ -61,6 +61,24 @@ self.PG = {
 
 async function load() {
     try {
+        // Single-file build: world-sim.js and perl6.js are concatenated into
+        // this worker's blob (after this glue), so there's nothing to fetch —
+        // poll for evalP6, which the inlined perl6.js defines as it runs.
+        if (self.PERL6_EMBEDDED) {
+            self.postMessage({ type: "progress", fraction: 1, phase: "compile" });
+            const t0 = Date.now();
+            const poll = setInterval(() => {
+                if (typeof self.evalP6 === "function") {
+                    clearInterval(poll);
+                    self.postMessage({ type: "ready" });
+                } else if (Date.now() - t0 > 120_000) {
+                    clearInterval(poll);
+                    self.postMessage({ type: "load-error", message: "embedded perl6.js did not initialize within 120s" });
+                }
+            }, 50);
+            return;
+        }
+
         importScripts(`world-sim.js?v=${BUILD}`); // defines self.WorldSim
 
         // Stream the download so the page can show real progress, then compile

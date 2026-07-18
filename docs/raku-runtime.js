@@ -34,7 +34,14 @@ function changeState(newState) {
 }
 
 function spawn() {
-    worker = new Worker(`raku-worker.js?v=${BUILD}`);
+    // Single-file build inlines the whole worker (glue + world-sim + perl6.js)
+    // in a <script type="text/plain" id="worker-src"> block — run it from a blob
+    // URL. Otherwise load the worker file (served build).
+    const embedded = typeof document !== "undefined" && document.getElementById("worker-src");
+    const workerUrl = embedded
+        ? URL.createObjectURL(new Blob([embedded.textContent], { type: "text/javascript" }))
+        : `raku-worker.js?v=${BUILD}`;
+    worker = new Worker(workerUrl);
     worker.onmessage = (e) => {
         const m = e.data;
         switch (m.type) {
