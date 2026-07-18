@@ -7,9 +7,12 @@ const { defineConfig } = require("@playwright/test");
 
 module.exports = defineConfig({
     testDir: "tests",
-    timeout: 240_000,        // the 77MB runtime takes a while on first load
+    timeout: 360_000,        // the 77MB runtime takes a while on first load
     expect: { timeout: 15_000 },
-    workers: 3,              // one per spec file; specs are serial inside
+    // The runtime runs in a Web Worker, so each browser now has two hot threads
+    // (page + worker). Running 3 browsers at once oversubscribes CI's 2 cores
+    // and slows every run ~5x, so go single-file on CI; keep parallelism locally.
+    workers: process.env.CI ? 1 : 3,
     reporter: [["list"]],
     forbidOnly: !!process.env.CI,
     use: {
