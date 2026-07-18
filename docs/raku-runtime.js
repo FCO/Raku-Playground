@@ -125,7 +125,13 @@ export const runtime = {
                 runtime.onProgress(1, "compile");
                 await new Promise((r) => setTimeout(r));
 
-                objectUrl = URL.createObjectURL(new Blob(chunks, { type: "text/javascript" }));
+                // Hand the bytes to a Blob, then drop our references so the
+                // ~77 MB of chunks can be GC'd instead of lingering in the JS
+                // heap alongside the blob while the compile runs (matters on
+                // memory-tight devices — phones — and CI).
+                const blob = new Blob(chunks, { type: "text/javascript" });
+                chunks.length = 0;
+                objectUrl = URL.createObjectURL(blob);
                 const script = document.createElement("script");
                 script.onload = () => {
                     clearTimeout(timeoutId);

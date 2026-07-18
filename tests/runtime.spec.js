@@ -10,7 +10,9 @@ let page;
 test.beforeAll(async ({ browser }) => {
     page = await browser.newPage();
     await page.goto("/", { waitUntil: "domcontentloaded" });
-    await expect(page.locator("#status")).toContainText("Loading Raku runtime");
+    // Loading copy is dynamic now (Starting/Downloading N%/Compiling), so
+    // assert the loading state rather than a specific phrase.
+    await expect(page.locator("#status")).toHaveClass(/loading/);
     await expect(page.locator("#run")).toBeDisabled();
     await boot(page);
     await page.evaluate(() => window.__playground.setSaga("free"));
