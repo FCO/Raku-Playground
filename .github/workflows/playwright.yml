@@ -17,7 +17,7 @@ jobs:
       - uses: Raku/setup-raku@v1   # the test web server is written in Raku
         with:
           raku-version: latest
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v5
         with:
           node-version: 22
           cache: npm
