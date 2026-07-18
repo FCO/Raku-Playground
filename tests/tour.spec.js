@@ -1,11 +1,12 @@
 // First-run onboarding tour (docs/tour.js). The tour appears on load, before
 // the 77 MB runtime is ready, so this spec never waits for runtime idle — it
 // only drives the overlay itself, which keeps it fast.
-const { test, expect } = require("@playwright/test");
+const { test, expect, chromium } = require("@playwright/test");
 
 test.describe.configure({ mode: "serial" });
 
 let page;
+let browser;
 
 // Fresh page with a cleared "tour seen" flag → the tour auto-starts.
 async function freshPage(browser) {
@@ -22,11 +23,15 @@ const total = (page) =>
 const current = (page) =>
     page.$eval(".tour-counter", (el) => Number(el.textContent.split("/")[0]));
 
-test.beforeAll(async ({ browser }) => {
+test.beforeAll(async () => {
+    // Own browser per spec file (not the worker-scoped fixture): a worker can
+    // run several files, and closing a fixture browser in one file's afterAll
+    // would leave the next file on that worker with a closed browser.
+    browser = await chromium.launch();
     page = await freshPage(browser);
 });
 
-test.afterAll(async ({ browser }) => {
+test.afterAll(async () => {
     // guard the teardown: a hung browser shutdown must not fail the run
     await page.close().catch(() => {});
     await Promise.race([browser.close(), new Promise((r) => setTimeout(r, 15000))]).catch(() => {});

@@ -1,13 +1,18 @@
 // Puzzle-world mechanics: falling, bumping, xx semantics, command return
 // values, the runaway guard after a fall, and step-through mode.
-const { test, expect } = require("@playwright/test");
+const { test, expect, chromium } = require("@playwright/test");
 const { boot, runProgram, outputText, clearOutput, bannerState, worldState } = require("./helpers");
 
 test.describe.configure({ mode: "serial" });
 
 let page;
+let browser;
 
-test.beforeAll(async ({ browser }) => {
+test.beforeAll(async () => {
+    // Own browser per spec file (not the worker-scoped fixture): a worker can
+    // run several files, and closing a fixture browser in one file's afterAll
+    // would leave the next file on that worker with a closed browser.
+    browser = await chromium.launch();
     page = await browser.newPage();
     await boot(page);
     await page.selectOption("#speed", "80");
@@ -19,7 +24,7 @@ test.beforeAll(async ({ browser }) => {
     });
 });
 
-test.afterAll(async ({ browser }) => {
+test.afterAll(async () => {
     // guard the teardown: a hung browser shutdown must not fail the run
     await page.close().catch(() => {});
     await Promise.race([browser.close(), new Promise((r) => setTimeout(r, 15000))]).catch(() => {});
