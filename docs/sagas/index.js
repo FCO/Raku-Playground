@@ -9,9 +9,11 @@ import containers from "./containers.js";
 import typesMop from "./types-mop.js";
 import phasers from "./phasers.js";
 import grammars from "./grammars.js";
-import memoizedDom from "./memoized-dom.js";
 import gemRush from "./gem-rush.js";
 
+// Note: the runtime runs in a Web Worker (no DOM), so DOM-manipulating sagas
+// aren't supported. The former "memoized-dom" saga was removed for this reason;
+// grammars stays because it renders via a message to the main thread, not DOM.
 export const SAGAS = [
     learnRaku,
     quoting,
@@ -20,6 +22,5 @@ export const SAGAS = [
     typesMop,
     phasers,
     grammars,
-    memoizedDom,
     gemRush,
 ];

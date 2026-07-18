@@ -6,9 +6,9 @@ import { SAGAS } from "./sagas/index.js";
 const statusEl = document.getElementById("status");
 const loadBar = document.getElementById("load-bar");
 const runButton = document.getElementById("run");
+const stopButton = document.getElementById("stop");
 const stepButton = document.getElementById("step");
 const clearButton = document.getElementById("clear");
-const exampleButton = document.getElementById("example");
 const hintButton = document.getElementById("hint-btn");
 const sagaSelect = document.getElementById("saga");
 const levelSelect = document.getElementById("level");
@@ -17,27 +17,7 @@ const outputEl = document.getElementById("output");
 const previewEl = document.getElementById("preview");
 const worldEl = document.getElementById("world");
 
-// Handle for Raku code in free play: EVAL :lang<JavaScript>, 'return PREVIEW'
-window.PREVIEW = previewEl;
-
 const SAMPLE = `say "Hello from Raku! \u{1F98B}";\nsay [+] 1..10;\n`;
-
-const DOM_EXAMPLE = `my \\doc     = EVAL :lang<JavaScript>, 'return document';
-my \\preview = EVAL :lang<JavaScript>, 'return PREVIEW';
-
-my \\h = doc.createElement('h2');
-h.appendChild: doc.createTextNode('Hello from Raku!');
-preview.appendChild: h;
-
-for <red green blue> -> $color {
-    my \\p = doc.createElement('p');
-    p.appendChild: doc.createTextNode("a $color paragraph");
-    p.setAttribute: 'style', "color: $color";
-    preview.appendChild: p;
-}
-
-say 'rendered!';
-`;
 
 let world = null;       // active World in puzzle mode, null otherwise
 let domLevel = null;    // active dom-type level (preview-pane world), null otherwise
@@ -57,6 +37,10 @@ function appendOutput(text, className) {
 
 runtime.onStdout = (text) => appendOutput(text);
 runtime.onStderr = (text) => appendOutput(text.endsWith("\n") ? text : text + "\n", "stderr");
+// Puzzle commands stream from the worker mid-run; collect them for playback.
+runtime.onCommand = (cmd) => { if (world) world.commands.push(cmd); };
+// Grammars: a highlight payload the worker computed; draw it into the preview.
+runtime.onRender = (payload) => renderMatches(payload);
 
 const STATUS_TEXT = {
     ready: "Ready",
@@ -85,6 +69,9 @@ function refreshControls() {
     runButton.disabled = !idle;
     runButton.textContent = state === "loading" ? "Loading…" : "Run";
     stepButton.disabled = !(idle || (stepSession && !stepping));
+    // Stop is available only while the worker is actually executing (a run in
+    // the worker) — the one moment it can be interrupted (by terminating it).
+    stopButton.hidden = state !== "running";
     // switching level or saga mid-run would tangle playback, progress and UI state
     sagaSelect.disabled = playing;
     levelSelect.disabled = playing;
@@ -178,13 +165,11 @@ function applyMode(mode) { // "puzzle" | "dom" | "free"
     domBanner.hidden = true;
     worldEl.hidden = mode !== "puzzle";
     previewEl.hidden = mode === "puzzle";
-    exampleButton.hidden = mode !== "free";
     speedSelect.hidden = mode !== "puzzle";
     stepButton.hidden = mode !== "puzzle";
     previewEl.replaceChildren();
     if (mode !== "puzzle") {
         world = null;
-        window.PG = undefined;
         worldEl.replaceChildren(); // drop any stale board (and its banner)
     }
     if (mode !== "dom") domLevel = null;
@@ -218,7 +203,7 @@ function enterFreePlay() {
     applyMode("free");
     showInstructions({
         name: "Free play",
-        goal: "Write any Raku you like. Output appears below; DOM built via the PREVIEW handle appears in the preview pane.",
+        goal: "Write any Raku you like — output appears in the pane below.",
         steps: [],
     });
     setEditorText(SAMPLE);
@@ -243,10 +228,6 @@ function setLevel(value) {
         domLevel = level;
     } else {
         world = new World(level, worldEl);
-        window.PG = {
-            command: (name) => world.command(name),
-            query: (name) => world.query(name),
-        };
         world.onFinished = (res) => { if (res.success) markComplete(idx); };
         world.onNext = idx + 1 < currentSaga.levels.length ? () => setLevel(String(idx + 1)) : null;
         world.render();
@@ -378,14 +359,46 @@ window.addEventListener("resize", () => world?.fitBoard());
 
 // ---------- running ----------
 
-function evalUserCode() {
+// Grammars: draw the worker-computed match highlights into the preview pane.
+// Payload: { text, ranges: [[from, to], …] } (char offsets). The matching ran
+// in the worker (pure Raku); we only build the <pre>/<mark> DOM here. Slice via
+// the spread so astral characters count as one position, matching Raku offsets.
+function renderMatches({ text, ranges }) {
+    const chars = [...text];
+    const pre = document.createElement("pre");
+    pre.className = "rx-specimen";
+    let pos = 0;
+    for (const [from, to] of ranges) {
+        if (from > pos) pre.appendChild(document.createTextNode(chars.slice(pos, from).join("")));
+        const mark = document.createElement("mark");
+        mark.textContent = chars.slice(from, to).join("");
+        pre.appendChild(mark);
+        pos = to;
+    }
+    if (pos < chars.length) pre.appendChild(document.createTextNode(chars.slice(pos).join("")));
+    previewEl.appendChild(pre);
+}
+
+function buildSource() {
     const src = editor.state.doc.toString();
     // any saga may carry a prelude; puzzle levels get the command PRELUDE first
     const parts = [];
     if (world) parts.push(PRELUDE);
     if ((world || domLevel) && currentSaga.prelude) parts.push(currentSaga.prelude);
     parts.push(src);
-    runtime.run(parts.join("\n"));
+    return parts.join("\n");
+}
+
+// Runs in the worker; puzzle commands stream into world.commands via onCommand.
+async function runUserCode() {
+    const level = world ? { grid: world.level.grid, start: world.level.start } : null;
+    const result = await runtime.run(buildSource(), level);
+    if (world) {
+        world.finalResult = result;
+        // Expose the final sim snapshot now (before playback/step animates), so
+        // world.sim.{x,y,dead,collected} is readable throughout playback.
+        if (result) world.sim = result;
+    }
 }
 
 async function record() {
@@ -398,13 +411,11 @@ async function record() {
         previewEl.replaceChildren();
         domBanner.hidden = true;
     }
-    // Let the browser paint before the synchronous eval blocks the thread.
     statusEl.textContent = STATUS_TEXT.running;
     statusEl.className = "status running";
     runButton.disabled = true;
     stepButton.disabled = true;
-    await sleep(20);
-    evalUserCode();
+    await runUserCode();
 }
 
 async function runCode() {
@@ -482,6 +493,7 @@ levelSelect.addEventListener("change", () => setLevel(levelSelect.value));
 
 runButton.addEventListener("click", runCode);
 stepButton.addEventListener("click", stepCode);
+stopButton.addEventListener("click", () => runtime.cancel());
 
 // Cmd+Enter (mac) / Ctrl+Enter (elsewhere) runs from anywhere — the editor's
 // own Mod-Enter keymap only fires while it has focus
@@ -492,10 +504,6 @@ document.addEventListener("keydown", (e) => {
     }
 });
 clearButton.addEventListener("click", () => { outputEl.textContent = ""; });
-exampleButton.addEventListener("click", () => {
-    setEditorText(DOM_EXAMPLE);
-    editor.focus();
-});
 hintButton.addEventListener("click", () => {
     document.getElementById("lvl-hint").hidden = false;
 });

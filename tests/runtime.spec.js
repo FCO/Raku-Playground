@@ -1,5 +1,5 @@
 // Runtime shim + free-play behavior: stdout decoding, stderr routing,
-// exceptions, exit, and the preview pane.
+// exceptions, exit, and off-thread (worker) execution.
 const { test, expect } = require("@playwright/test");
 const { boot, waitIdle, runProgram, outputText, stderrText, clearOutput } = require("./helpers");
 
@@ -88,15 +88,32 @@ test("exit is clean and the runtime stays usable", async () => {
     expect(await outputText(page)).toContain("still-alive");
 });
 
-test("free-play preview: placeholder, DOM example renders, cleared on next run", async () => {
-    expect(await page.$eval("#preview", (el) => el.matches(":empty"))).toBe(true);
+test("free-play is text-only (runtime runs in the worker, no DOM)", async () => {
     await clearOutput(page);
-    await page.click("#example");
-    await page.evaluate(() => window.__playground.runCode());
-    await waitIdle(page);
-    await expect(page.locator("#preview h2")).toHaveText("Hello from Raku!");
-    expect(await page.locator("#preview p").count()).toBe(3);
-    expect(await outputText(page)).toContain("rendered!");
-    await runProgram(page, 'say 42;');
+    await runProgram(page, 'say "hi from free play";');
+    expect(await outputText(page)).toContain("hi from free play");
     expect(await page.$eval("#preview", (el) => el.matches(":empty"))).toBe(true);
+});
+
+test("a run executes off the main thread (async, non-blocking)", async () => {
+    await clearOutput(page);
+    // The run is asynchronous: the runtime flips to "running" synchronously
+    // after the call returns and control comes back to us *before* it finishes —
+    // impossible if evalP6 still blocked the UI thread (the old behavior). While
+    // it runs, a main-thread timer keeps firing (the thread isn't frozen).
+    const r = await page.evaluate(async () => {
+        const { editor, runCode, runtime } = window.__playground;
+        editor.dispatch({ changes: { from: 0, to: editor.state.doc.length, insert: "say [+] 1..2000000;" } });
+        let ticks = 0;
+        const iv = setInterval(() => { ticks++; }, 5);
+        const p = runCode();
+        const runningRightAfterCall = runtime.state === "running";
+        await p;
+        clearInterval(iv);
+        return { runningRightAfterCall, readyAfter: runtime.state === "ready", ticks };
+    });
+    expect(r.runningRightAfterCall).toBe(true);
+    expect(r.readyAfter).toBe(true);
+    expect(r.ticks).toBeGreaterThan(0); // the main thread ran timers during the run
+    expect(await outputText(page)).toContain("2000001000000");
 });

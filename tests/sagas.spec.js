@@ -74,11 +74,13 @@ test("success banner offers Next level and it advances", async () => {
     expect(await page.inputValue("#level")).toBe("1");
 });
 
-test("dom levels re-run cleanly (my-scoped classes, no redeclaration)", async () => {
-    await page.evaluate(() => { window.__playground.setSaga("memoized-dom"); window.__playground.setLevel("0"); });
+test("grammars renders match highlights via the worker channel, re-runs cleanly", async () => {
+    await page.evaluate(() => { window.__playground.setSaga("grammars"); window.__playground.setLevel("0"); });
     const solution = await page.evaluate(() => window.__playground.levels[0].solution);
     await runProgram(page, solution);
-    await runProgram(page, solution);
+    await runProgram(page, solution); // re-run: preview cleared, marks not duplicated
+    const marks = await page.$$eval("#preview mark", (els) => els.map((m) => m.textContent));
+    expect(marks).toEqual(["gem"]);
     const banner = await bannerState(page);
     expect(banner.success, banner && banner.text).toBe(true);
 });

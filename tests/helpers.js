@@ -18,7 +18,9 @@ async function boot(page) {
 }
 
 async function waitIdle(page) {
-    await page.waitForFunction(idle, undefined, { timeout: 120_000 });
+    // Poll at an interval rather than every frame: the runtime is in a worker,
+    // and frame-rate polling on the page thread steals cycles from it.
+    await page.waitForFunction(idle, undefined, { timeout: 120_000, polling: 250 });
     await page.waitForTimeout(400); // stderr grace window
 }
 
