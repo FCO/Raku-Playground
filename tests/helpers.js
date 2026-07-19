@@ -46,10 +46,11 @@ const stderrText = (page) =>
 
 const clearOutput = (page) => page.click("#clear");
 
-// The visible result banner: the puzzle world's or the dom strip.
+// The visible result banner: the puzzle world's, the elevator building's, or
+// the dom strip.
 function bannerState(page) {
     return page.evaluate(() => {
-        const el = [...document.querySelectorAll("#world .banner, #dom-banner")]
+        const el = [...document.querySelectorAll("#world .banner, #building .banner, #dom-banner")]
             .find((b) => !b.hidden && b.offsetParent !== null);
         return el ? {
             text: el.textContent,

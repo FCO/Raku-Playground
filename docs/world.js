@@ -239,6 +239,8 @@ export class World {
         }
     }
 
+    isEmpty() { return this.commands.length === 0; }
+
     // Applies the next recorded command; returns true while more remain.
     async stepOnce(stepMs = 300) {
         if (this.playIndex >= this.commands.length) return false;
