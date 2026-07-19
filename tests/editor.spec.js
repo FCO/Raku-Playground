@@ -135,3 +135,18 @@ test("switching theme recolors the WHOLE editor, gutter included, and persists",
     await page.waitForFunction(() => window.__playground && window.__playground.editor);
     expect(await page.$eval("#theme", (el) => el.value)).toBe("nord");
 });
+
+test("hyphenated Raku identifiers are one token, not split into coloured sub-words", async () => {
+    // The stock grammar splits go-to-floor / is-on-gem and colours the embedded
+    // `floor` (builtin) / `is` (keyword); the prepended kebab rule prevents that.
+    await setDoc("$e.go-to-floor(0); is-on-gem; my $x = 10 - 3;");
+    await page.waitForFunction(
+        () => document.querySelectorAll(".cm-content span[style*='color']").length > 0,
+        null, { timeout: 20000 });
+    // no coloured span may be exactly one of the embedded words a broken split produces
+    const embedded = await page.$$eval(".cm-content span[style*='color']", (ss) =>
+        ss.map((s) => s.textContent).filter((t) => ["floor", "is", "to", "on", "gem"].includes(t)));
+    expect(embedded, `mis-split sub-tokens: ${embedded.join()}`).toEqual([]);
+    // sanity: real subtraction still tokenises normally (10 and 3 present as text)
+    expect(await page.locator(".cm-content").innerText()).toContain("10 - 3");
+});

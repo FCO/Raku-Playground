@@ -647,6 +647,138 @@ main {
 .dom-banner.success { background: #a6e3a1; color: #14351a; }
 .dom-banner.failure { background: #f38ba8; color: #40101f; }
 
+/* ---------- elevator saga ---------- */
+
+#building {
+    flex: 1.4;
+    min-height: 0;
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    background: linear-gradient(#1b2233, #0f1420);
+    border-bottom: 1px solid #313244;
+    overflow: auto;
+    padding: 0.6rem;
+    color: #cdd6f4;
+}
+
+.bldg-hud {
+    align-self: stretch;
+    padding: 0.3rem 0.7rem;
+    margin-bottom: 0.5rem;
+    background: rgba(30, 30, 46, 0.85);
+    border: 1px solid #313244;
+    border-radius: 8px;
+    font-weight: 700;
+    font-size: 13px;
+    text-align: center;
+    color: #f5e0dc;
+}
+
+.bldg-stage {
+    flex: 1;
+    display: grid;
+    place-items: center;
+    width: 100%;
+}
+
+.bldg-shafts { position: relative; margin: auto; }
+
+.bldg-floor {
+    position: absolute;
+    left: 0;
+    right: 0;
+    height: 56px; /* FLOOR_H in elevator-engine.js */
+    display: flex;
+    align-items: center;
+    border-bottom: 1px dashed #313244;
+    box-sizing: border-box;
+}
+.bldg-floor:first-child { border-bottom: 2px solid #45475a; }
+
+.bldg-floor-label {
+    width: 1.6rem;
+    text-align: center;
+    color: #7f849c;
+    font-weight: 700;
+    font-size: 12px;
+}
+
+.bldg-wait {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 3px;
+    align-items: center;
+    max-width: 70px;
+}
+
+.bldg-person {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 16px;
+    height: 16px;
+    border-radius: 50%;
+    font-size: 9px;
+    font-weight: 700;
+    color: #1e1e2e;
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.4);
+}
+.bldg-person.up { background: #a6e3a1; }   /* heading up */
+.bldg-person.down { background: #fab387; } /* heading down */
+.bldg-person.rider { width: 13px; height: 13px; font-size: 8px; }
+.bldg-person.arrived { transition: opacity .3s, transform .3s; opacity: 0; transform: scale(1.6); }
+
+.bldg-shaft {
+    position: absolute;
+    bottom: 0;
+    width: 44px;
+    background: rgba(17, 17, 27, 0.6);
+    border-left: 1px solid #313244;
+    border-right: 1px solid #313244;
+}
+
+.bldg-car {
+    position: absolute;
+    left: 3px;
+    right: 3px;
+    height: 50px;
+    background: linear-gradient(#89b4fa, #6a9bf4);
+    border-radius: 5px;
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.5), inset 0 0 0 2px #b4befe;
+    transition: bottom 400ms linear;
+    box-sizing: border-box;
+    overflow: hidden;
+}
+.bldg-car.doors-open {
+    background: linear-gradient(#a6c8ff, #89b4fa);
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.5), inset 0 0 0 2px #f9e2af;
+}
+
+.bldg-riders {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 2px;
+    align-items: center;
+    justify-content: center;
+    padding: 2px;
+    height: 100%;
+    box-sizing: border-box;
+}
+
+#building .banner {
+    position: sticky;
+    bottom: 0.4rem;
+    margin-top: 0.5rem;
+    padding: 0.5rem 1.2rem;
+    border-radius: 10px;
+    font-weight: 700;
+    text-align: center;
+}
+#building .banner.success { background: #a6e3a1; color: #14351a; }
+#building .banner.failure { background: #f38ba8; color: #40101f; }
+
 @media (max-width: 700px) {
     main { flex-direction: column; }
     /* compact header: the controls otherwise stack four rows tall */

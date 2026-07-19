@@ -4,6 +4,7 @@ import {
 } from "./vendor/codemirror.js";
 import { runtime } from "./raku-runtime.js";
 import { World, PRELUDE, sleep, nextLevelButton } from "./world.js";
+import { Building, ELEVATOR_ENGINE } from "./elevator-engine.js";
 import { SAGAS } from "./sagas/index.js";
 import { startTour, maybeAutoStartTour } from "./tour.js";
 
@@ -21,10 +22,12 @@ const speedSelect = document.getElementById("speed");
 const outputEl = document.getElementById("output");
 const previewEl = document.getElementById("preview");
 const worldEl = document.getElementById("world");
+const buildingEl = document.getElementById("building");
 
 const SAMPLE = `say "Hello from Raku! \u{1F98B}";\nsay [+] 1..10;\n`;
 
 let world = null;       // active World in puzzle mode, null otherwise
+let building = null;    // active Building in elevator mode, null otherwise
 let domLevel = null;    // active dom-type level (preview-pane world), null otherwise
 let playing = false;    // animation playback (or step session) in progress
 let stepSession = false;
@@ -42,8 +45,11 @@ function appendOutput(text, className) {
 
 runtime.onStdout = (text) => appendOutput(text);
 runtime.onStderr = (text) => appendOutput(text.endsWith("\n") ? text : text + "\n", "stderr");
-// Puzzle commands stream from the worker mid-run; collect them for playback.
-runtime.onCommand = (cmd) => { if (world) world.commands.push(cmd); };
+// Puzzle/elevator events stream from the worker mid-run; collect for playback.
+runtime.onCommand = (cmd) => {
+    if (world) world.commands.push(cmd);
+    else if (building) building.events.push(cmd);
+};
 // Grammars: a highlight payload the worker computed; draw it into the preview.
 runtime.onRender = (payload) => renderMatches(payload);
 
@@ -164,18 +170,24 @@ let currentLevel = "0";
 
 // One place owns the per-mode UI state and cross-mode teardown; the drift
 // between hand-maintained flag blocks was a bug factory.
-function applyMode(mode) { // "puzzle" | "dom" | "free"
+function applyMode(mode) { // "puzzle" | "elevator" | "dom" | "free"
     stepSession = false;
     stepping = false;
     domBanner.hidden = true;
+    const animated = mode === "puzzle" || mode === "elevator"; // has speed/step + a stage
     worldEl.hidden = mode !== "puzzle";
-    previewEl.hidden = mode === "puzzle";
-    speedSelect.hidden = mode !== "puzzle";
-    stepButton.hidden = mode !== "puzzle";
+    buildingEl.hidden = mode !== "elevator";
+    previewEl.hidden = animated;
+    speedSelect.hidden = !animated;
+    stepButton.hidden = !animated;
     previewEl.replaceChildren();
     if (mode !== "puzzle") {
         world = null;
         worldEl.replaceChildren(); // drop any stale board (and its banner)
+    }
+    if (mode !== "elevator") {
+        building = null;
+        buildingEl.replaceChildren();
     }
     if (mode !== "dom") domLevel = null;
 }
@@ -226,15 +238,21 @@ function setLevel(value) {
 
     const idx = Number(value);
     const level = currentSaga.levels[idx];
-    const dom = level.type === "dom";
-    applyMode(dom ? "dom" : "puzzle");
+    const mode = level.type === "dom" ? "dom" : level.type === "elevator" ? "elevator" : "puzzle";
+    applyMode(mode);
 
-    if (dom) {
+    const onNext = idx + 1 < currentSaga.levels.length ? () => setLevel(String(idx + 1)) : null;
+    if (mode === "dom") {
         domLevel = level;
+    } else if (mode === "elevator") {
+        building = new Building(level, buildingEl);
+        building.onFinished = (res) => { if (res.success) markComplete(idx); };
+        building.onNext = onNext;
+        building.render();
     } else {
         world = new World(level, worldEl);
         world.onFinished = (res) => { if (res.success) markComplete(idx); };
-        world.onNext = idx + 1 < currentSaga.levels.length ? () => setLevel(String(idx + 1)) : null;
+        world.onNext = onNext;
         world.render();
         applyView();
     }
@@ -384,8 +402,22 @@ function renderMatches({ text, ranges }) {
     previewEl.appendChild(pre);
 }
 
+// The level's plain fields become Raku constants the engine reads — one physical
+// line, so the user's code (which comes first) keeps correct line numbers.
+function elevatorConfig(level) {
+    const caps = Array.isArray(level.capacity) ? level.capacity : [level.capacity];
+    const g = level.budget;
+    return `my $FLOORS = ${level.floors}; my $ELEVATORS = ${level.elevators}; `
+        + `my @CAPACITY = ${caps.join(",")}; my $SEED = ${level.seed}; `
+        + `my $SPAWN-COUNT = ${level.spawns}; my $GOAL-N = ${g.transport}; `
+        + `my $GOAL-T = ${g.time}; my $MAX-MOVES = ${g.maxMoves || 0}; my $MAX-WAIT = ${g.maxWait || 0};`;
+}
+
 function buildSource() {
     const src = editor.state.doc.toString();
+    // Elevator: user code first (keeps line numbers), then config, then the
+    // engine — which ends by calling the user's init/update.
+    if (building) return [src, elevatorConfig(building.level), ELEVATOR_ENGINE].join("\n");
     // any saga may carry a prelude; puzzle levels get the command PRELUDE first
     const parts = [];
     if (world) parts.push(PRELUDE);
@@ -394,15 +426,19 @@ function buildSource() {
     return parts.join("\n");
 }
 
-// Runs in the worker; puzzle commands stream into world.commands via onCommand.
+// Runs in the worker; puzzle/elevator events stream into the stage via onCommand.
 async function runUserCode() {
-    const level = world ? { grid: world.level.grid, start: world.level.start } : null;
+    let level = null;
+    if (world) level = { grid: world.level.grid, start: world.level.start };
+    else if (building) level = { sim: "elevator", goal: building.level.budget };
     const result = await runtime.run(buildSource(), level);
     if (world) {
         world.finalResult = result;
         // Expose the final sim snapshot now (before playback/step animates), so
         // world.sim.{x,y,dead,collected} is readable throughout playback.
         if (result) world.sim = result;
+    } else if (building) {
+        building.finalResult = result;
     }
 }
 
@@ -412,6 +448,9 @@ async function record() {
     if (world) {
         world.reset();
         world.render();
+    } else if (building) {
+        building.reset();
+        building.render();
     } else {
         previewEl.replaceChildren();
         domBanner.hidden = true;
@@ -431,6 +470,7 @@ async function runCode() {
     try {
         await record();
         if (world) await world.playAll(Number(speedSelect.value));
+        else if (building) await building.playAll(Number(speedSelect.value));
         else if (domLevel) showDomResult();
     } finally {
         playing = false;
@@ -439,15 +479,16 @@ async function runCode() {
 }
 
 async function stepCode() {
-    if (!world) return;
+    const stage = world || building;
+    if (!stage) return;
     if (!stepSession) {
         if (runtime.state !== "ready" || playing) return;
         playing = true;
         stepSession = true;
         refreshControls();
         await record();
-        if (world.commands.length === 0) {  // nothing recorded, finish at once
-            world.finish();
+        if (stage.isEmpty()) {  // nothing recorded, finish at once
+            stage.finish();
             playing = false;
             stepSession = false;
         }
@@ -458,9 +499,9 @@ async function stepCode() {
     stepping = true;
     refreshControls();
     try {
-        const more = await world.stepOnce();
+        const more = await stage.stepOnce();
         if (!more) {
-            world.finish();
+            stage.finish();
             playing = false;
             stepSession = false;
         }
@@ -536,13 +577,27 @@ const THEME_KEY = "raku-playground-theme";
 let themeId = storageGet(THEME_KEY);
 if (!themeId || !THEMES[themeId]) themeId = Object.keys(THEMES)[0]; // default = first (One Dark Pro)
 
+// The stock Raku TextMate grammar doesn't know Raku identifiers may contain
+// hyphens (go-to-floor, is-on-gem, move-forward, is-blocked), so it splits them
+// and colours the embedded words — `floor` as a builtin, `is`/`to` as keywords.
+// Prepend a highest-priority rule that matches a whole hyphenated identifier so
+// it tokenises as one name. The scope is one no theme styles, so these render in
+// the plain editor foreground (real subtraction like `10 - 3` is untouched — the
+// rule needs a letter on both sides of every hyphen).
+// (`rakuLang` is the grammar's default export — an array of one grammar object,
+// which is frozen — so clone it and patch the copy, then feed that to Shiki.)
+const kebabRule = { match: "\\b[A-Za-z_]\\w*(?:-[A-Za-z_]\\w*)+\\b", name: "meta.identifier.hyphenated.raku" };
+const rakuBase = Array.isArray(rakuLang) ? rakuLang[0] : rakuLang;
+const rakuPatched = JSON.parse(JSON.stringify(rakuBase)); // grammars are pure JSON
+rakuPatched.patterns = [kebabRule, ...(rakuPatched.patterns || [])];
+
 // Build the highlighter once (real Raku TextMate grammar via the JS regex
 // engine — forgiving so any oniguruma-only pattern can't hard-fail the load).
 // We pass the *promise* to codemirror-shiki: given a Promise it defers its
 // first dispatch to a microtask, so installing the extension mid-update (a
 // compartment reconfigure) can't trigger "update in progress".
 const highlighterReady = createHighlighterCore({
-    langs: [rakuLang],
+    langs: [rakuPatched],
     themes: Object.values(THEMES).map((t) => t.theme),
     engine: createJavaScriptRegexEngine({ forgiving: true }),
 });
@@ -646,6 +701,7 @@ window.__playground = {
     setSaga: (v) => setSaga(String(v)),
     setLevel: (v) => (String(v) === "free" ? setSaga("free") : setLevel(String(v))),
     getWorld: () => world,
+    getBuilding: () => building,
     isPlaying: () => playing,
     sagas: SAGAS,
     get levels() { return currentSaga.levels; },

@@ -9,6 +9,7 @@ import containers from "./containers.js";
 import typesMop from "./types-mop.js";
 import phasers from "./phasers.js";
 import grammars from "./grammars.js";
+import elevator from "./elevator.js";
 import gemRush from "./gem-rush.js";
 
 // Note: the runtime runs in a Web Worker (no DOM), so DOM-manipulating sagas
@@ -22,5 +23,6 @@ export const SAGAS = [
     typesMop,
     phasers,
     grammars,
+    elevator,
     gemRush,
 ];

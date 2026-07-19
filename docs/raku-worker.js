@@ -21,6 +21,14 @@ self.window = self;
 // NQP_STDOUT HTML-encodes non-ASCII (e.g. § → &sect;), which would hide it. `@`
 // and the digits/commas of the payload pass through escapeXML untouched.
 const RX = "@@RX@@";
+// The elevator saga streams presentation events (car moved, doors, board/…)
+// on the same reliable stdout channel with a distinct ASCII sentinel: one line
+// per sim tick, ';'-separated events of '|'-separated integer fields
+// ("type|t|arg…"). We parse them here, feed the ElevatorPresenter (so `done`
+// can report a result) and forward each event as a command for the main thread
+// to animate. ASCII-only, like @@RX@@, so NQP_STDOUT's HTML-encoding leaves it
+// intact.
+const EV = "@@EV@@";
 self.NQP_STDOUT = (s) => {
     s = String(s);
     if (s.startsWith(RX)) {
@@ -34,8 +42,41 @@ self.NQP_STDOUT = (s) => {
         });
         return;
     }
+    if (s.startsWith(EV)) {
+        for (const chunk of s.slice(EV.length).trimEnd().split(";")) {
+            if (!chunk) continue;
+            const parts = chunk.split("|");
+            const nums = parts.slice(1).map(Number);
+            const cmd = { ev: parts[0], t: nums[0], a: nums.slice(1) };
+            if (sim && sim.event) sim.event(cmd);
+            self.postMessage({ type: "command", cmd });
+        }
+        return;
+    }
     self.postMessage({ type: "stdout", text: s });
 };
+
+// Tallies the elevator event stream into a result the `done` message reports.
+// Transported/moves/waits come straight from the (trusted) engine's events, so
+// the pass/fail check is honest regardless of what the user's control code does.
+class ElevatorPresenter {
+    constructor(goal) { this.goal = goal || {}; this.transported = 0; this.moves = 0; this.waits = []; this.elapsed = 0; }
+    event(ev) {
+        if (ev.t > this.elapsed) this.elapsed = ev.t;
+        if (ev.ev === "a") this.transported++;
+        else if (ev.ev === "t") this.moves++;
+        else if (ev.ev === "b") this.waits.push(ev.a[4]);
+    }
+    result() {
+        const g = this.goal;
+        const maxWait = this.waits.length ? Math.max(...this.waits) : 0;
+        const avgWait = this.waits.length ? this.waits.reduce((x, y) => x + y, 0) / this.waits.length : 0;
+        let success = this.transported >= (g.transport || 0);
+        if (g.maxMoves) success = success && this.moves <= g.maxMoves;
+        if (g.maxWait) success = success && maxWait <= g.maxWait * 1000;
+        return { success, transported: this.transported, moves: this.moves, maxWait, avgWait, elapsed: this.elapsed };
+    }
+}
 
 // stderr is hard-wired to console.error inside perl6.js; forward it only during
 // a run (+ a short grace window, since it can flush a tick late).
@@ -118,7 +159,9 @@ async function load() {
 self.onmessage = (e) => {
     const msg = e.data;
     if (msg.type !== "run") return;
-    sim = msg.level ? new self.WorldSim(msg.level) : null;
+    sim = msg.level
+        ? (msg.level.sim === "elevator" ? new ElevatorPresenter(msg.level.goal) : new self.WorldSim(msg.level))
+        : null;
     running = true;
     try {
         self.evalP6(msg.source);

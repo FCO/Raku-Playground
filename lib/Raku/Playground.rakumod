@@ -38,8 +38,11 @@ I<Regexes & Grammars> covers Raku's crown jewels — from C</gem/> to
 grammars with actions, with every match highlighted live in the preview
 pane; I<Build Websites> teaches
 L<MemoizedDOM|https://github.com/FCO/MemoizedDOM> — declarative,
-memoized web pages in Raku, rendered live in the preview pane; I<Gem Rush>
-adds challenge islands. Locked progression per saga, adjustable playback
+memoized web pages in Raku, rendered live in the preview pane;
+I<Elevator Saga> is an event-driven port of
+L<play.elevatorsaga.com|https://play.elevatorsaga.com/> — you write
+C<init>/C<update> handlers to run a whole building of elevators, simulated
+entirely in Raku; I<Gem Rush> adds challenge islands. Locked progression per saga, adjustable playback
 speed, step-through, and a click-and-drag 3D world. New sagas are single
 JavaScript files dropped into C<docs/sagas/>:
 
