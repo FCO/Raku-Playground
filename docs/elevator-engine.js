@@ -262,9 +262,15 @@ export class Building {
         this.waits = [];
         this.elapsed = 0;
         this._pb = 0.28;
+        this.aborted = false;       // set by abort() to halt playback (Stop button)
         this.waitEls = new Map();   // personId -> waiting dot element
         this.riderEls = new Map();  // personId -> rider dot element
     }
+
+    // Halt the sleep-paced replay loop. The whole sim runs in the worker in one
+    // evalP6 call, so by the time these events animate the worker is already idle
+    // — this, not runtime.cancel, is what the Stop button interrupts.
+    abort() { this.aborted = true; }
 
     isEmpty() { return this.events.length === 0; }
 
@@ -330,13 +336,19 @@ export class Building {
         const g = this.level.budget || {};
         const maxW = this.waits.length ? Math.max(...this.waits) : 0;
         const avgW = this.waits.length ? this.waits.reduce((a, b) => a + b, 0) / this.waits.length : 0;
-        this.hud.textContent = [
+        const stats = [
             `🧍 ${this.transported}/${g.transport ?? "?"}`,
             `⏱ ${(this.elapsed / 1000).toFixed(1)}s${g.time ? " / " + g.time + "s" : ""}`,
             `avg ${(avgW / 1000).toFixed(1)}s`,
             `max ${(maxW / 1000).toFixed(1)}s${g.maxWait ? " / " + g.maxWait + "s" : ""}`,
             `⇅ ${this.moves}${g.maxMoves ? " / " + g.maxMoves : ""}`,
-        ].join("   ·   ");
+        ];
+        this.hud.replaceChildren(...stats.map((s) => {
+            const el = document.createElement("span");
+            el.className = "bldg-stat";
+            el.textContent = s;
+            return el;
+        }));
     }
 
     // ---------- playback ----------
@@ -419,8 +431,10 @@ export class Building {
         this.events.sort((x, y) => x.t - y.t);
         let last = 0;
         for (const ev of this.events) {
+            if (this.aborted) return;
             const wait = Math.max(0, (ev.t - last) * this._pb);
             if (wait > 0) await sleep(wait);
+            if (this.aborted) return;
             last = ev.t;
             this.applyEvent(ev);
         }

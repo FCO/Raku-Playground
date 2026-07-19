@@ -80,9 +80,10 @@ function refreshControls() {
     runButton.disabled = !idle;
     runButton.textContent = state === "loading" ? "Loading…" : "Run";
     stepButton.disabled = !(idle || (stepSession && !stepping));
-    // Stop is available only while the worker is actually executing (a run in
-    // the worker) — the one moment it can be interrupted (by terminating it).
-    stopButton.hidden = state !== "running";
+    // Stop is available while the worker executes a run AND while the main-thread
+    // playback replays it — the elevator/puzzle animation runs after the worker is
+    // already idle, so `playing` (not just "running") is when Stop must show.
+    stopButton.hidden = !(state === "running" || playing);
     // switching level or saga mid-run would tangle playback, progress and UI state
     sagaSelect.disabled = playing;
     levelSelect.disabled = playing;
@@ -676,7 +677,19 @@ levelSelect.addEventListener("change", () => setLevel(levelSelect.value));
 
 runButton.addEventListener("click", runCode);
 stepButton.addEventListener("click", stepCode);
-stopButton.addEventListener("click", () => runtime.cancel());
+stopButton.addEventListener("click", () => {
+    // A worker run still executing (e.g. a runaway loop) — terminate + respawn.
+    if (runtime.state === "running") runtime.cancel();
+    // Halt main-thread playback (the elevator/puzzle replay runs after the worker
+    // is idle). playAll bails out and its finally clears `playing`; a step session
+    // has no loop awaiting, so end it here.
+    (world || building)?.abort();
+    if (stepSession && !stepping) {
+        playing = false;
+        stepSession = false;
+        refreshControls();
+    }
+});
 
 // Cmd+Enter (mac) / Ctrl+Enter (elsewhere) runs from anywhere — the editor's
 // own Mod-Enter keymap only fires while it has focus

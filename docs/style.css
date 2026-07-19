@@ -656,7 +656,9 @@ main {
     display: flex;
     flex-direction: column;
     align-items: center;
-    background: linear-gradient(#1b2233, #0f1420);
+    background:
+        radial-gradient(120% 80% at 50% -10%, rgba(137, 180, 250, 0.14), transparent 60%),
+        linear-gradient(#1b2233, #0d1119);
     border-bottom: 1px solid #313244;
     overflow: auto;
     padding: 0.6rem;
@@ -665,15 +667,28 @@ main {
 
 .bldg-hud {
     align-self: stretch;
-    padding: 0.3rem 0.7rem;
-    margin-bottom: 0.5rem;
-    background: rgba(30, 30, 46, 0.85);
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 0.35rem;
+    padding: 0.35rem;
+    margin-bottom: 0.6rem;
+    background: rgba(20, 22, 34, 0.7);
     border: 1px solid #313244;
-    border-radius: 8px;
+    border-radius: 10px;
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
+}
+.bldg-stat {
+    display: inline-flex;
+    align-items: center;
+    padding: 0.15rem 0.55rem;
+    border-radius: 999px;
+    background: rgba(49, 50, 68, 0.55);
+    border: 1px solid rgba(180, 190, 254, 0.14);
     font-weight: 700;
-    font-size: 13px;
-    text-align: center;
+    font-size: 12px;
     color: #f5e0dc;
+    white-space: nowrap;
 }
 
 .bldg-stage {
@@ -683,7 +698,38 @@ main {
     width: 100%;
 }
 
-.bldg-shafts { position: relative; margin: auto; }
+.bldg-shafts {
+    position: relative;
+    margin: auto;
+    padding: 0 10px;
+    border-radius: 10px 10px 0 0;
+    background: linear-gradient(180deg, rgba(30, 34, 52, 0.35), rgba(17, 20, 32, 0.55));
+    box-shadow: 0 18px 40px rgba(0, 0, 0, 0.45);
+}
+/* roof cap */
+.bldg-shafts::before {
+    content: "";
+    position: absolute;
+    left: -6px;
+    right: -6px;
+    top: -12px;
+    height: 12px;
+    border-radius: 6px 6px 0 0;
+    background: linear-gradient(180deg, #3b4467, #262c44);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08);
+}
+/* ground slab */
+.bldg-shafts::after {
+    content: "";
+    position: absolute;
+    left: -14px;
+    right: -14px;
+    bottom: -10px;
+    height: 10px;
+    border-radius: 0 0 6px 6px;
+    background: linear-gradient(180deg, #2a3049, #171a29);
+    box-shadow: 0 8px 18px rgba(0, 0, 0, 0.5);
+}
 
 .bldg-floor {
     position: absolute;
@@ -692,17 +738,26 @@ main {
     height: 56px; /* FLOOR_H in elevator-engine.js */
     display: flex;
     align-items: center;
-    border-bottom: 1px dashed #313244;
+    border-bottom: 1px dashed rgba(69, 71, 90, 0.6);
     box-sizing: border-box;
 }
-.bldg-floor:first-child { border-bottom: 2px solid #45475a; }
+.bldg-floor:nth-child(even) { background: rgba(137, 180, 250, 0.03); }
+.bldg-floor:first-child {
+    border-bottom: 3px solid #45475a;
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.4);
+}
 
 .bldg-floor-label {
     width: 1.6rem;
+    margin: 0 0.15rem;
     text-align: center;
-    color: #7f849c;
+    color: #9aa0c0;
     font-weight: 700;
-    font-size: 12px;
+    font-size: 11px;
+    line-height: 18px;
+    border-radius: 5px;
+    background: rgba(49, 50, 68, 0.5);
+    box-shadow: inset 0 0 0 1px rgba(180, 190, 254, 0.12);
 }
 
 .bldg-wait {
@@ -721,22 +776,31 @@ main {
     height: 16px;
     border-radius: 50%;
     font-size: 9px;
-    font-weight: 700;
+    font-weight: 800;
     color: #1e1e2e;
-    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.4);
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.45), inset 0 1px 1px rgba(255, 255, 255, 0.5);
+    animation: bldg-pop 0.28s cubic-bezier(0.34, 1.56, 0.64, 1) both;
 }
-.bldg-person.up { background: #a6e3a1; }   /* heading up */
-.bldg-person.down { background: #fab387; } /* heading down */
-.bldg-person.rider { width: 13px; height: 13px; font-size: 8px; }
-.bldg-person.arrived { transition: opacity .3s, transform .3s; opacity: 0; transform: scale(1.6); }
+.bldg-person.up { background: radial-gradient(circle at 50% 30%, #cbf5c4, #a6e3a1); }   /* heading up */
+.bldg-person.down { background: radial-gradient(circle at 50% 30%, #ffd3b0, #fab387); } /* heading down */
+.bldg-person.rider { width: 13px; height: 13px; font-size: 8px; animation: none; }
+.bldg-person.arrived { transition: opacity .35s, transform .35s; opacity: 0; transform: translateY(-6px) scale(1.5); }
+
+@keyframes bldg-pop {
+    0% { opacity: 0; transform: scale(0) translateY(4px); }
+    100% { opacity: 1; transform: scale(1) translateY(0); }
+}
 
 .bldg-shaft {
     position: absolute;
     bottom: 0;
     width: 44px;
-    background: rgba(17, 17, 27, 0.6);
+    background:
+        linear-gradient(90deg, rgba(180, 190, 254, 0.06) 0 1px, transparent 1px) 0 0 / 6px 100%,
+        rgba(12, 13, 21, 0.72);
     border-left: 1px solid #313244;
     border-right: 1px solid #313244;
+    box-shadow: inset 0 0 12px rgba(0, 0, 0, 0.55);
 }
 
 .bldg-car {
@@ -744,19 +808,46 @@ main {
     left: 3px;
     right: 3px;
     height: 50px;
-    background: linear-gradient(#89b4fa, #6a9bf4);
+    /* cabin interior — revealed when the doors slide open */
+    background: linear-gradient(180deg, #2b3350, #1c2238);
     border-radius: 5px;
-    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.5), inset 0 0 0 2px #b4befe;
-    transition: bottom 400ms linear;
+    box-shadow: 0 3px 8px rgba(0, 0, 0, 0.55), inset 0 0 0 2px #4a5580;
+    transition: bottom 400ms linear, box-shadow 300ms ease;
     box-sizing: border-box;
     overflow: hidden;
 }
-.bldg-car.doors-open {
-    background: linear-gradient(#a6c8ff, #89b4fa);
-    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.5), inset 0 0 0 2px #f9e2af;
+/* two metallic door leaves that meet in the middle */
+.bldg-car::before,
+.bldg-car::after {
+    content: "";
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    width: 50%;
+    z-index: 3;
+    background: linear-gradient(180deg, #9cc0ff, #6a9bf4);
+    transition: transform 320ms cubic-bezier(0.5, 0, 0.2, 1);
 }
+.bldg-car::before {
+    left: 0;
+    border-right: 1px solid rgba(17, 17, 27, 0.5);
+    box-shadow: inset -3px 0 5px rgba(0, 0, 0, 0.25), inset 0 0 0 1px rgba(180, 190, 254, 0.4);
+}
+.bldg-car::after {
+    right: 0;
+    border-left: 1px solid rgba(17, 17, 27, 0.5);
+    box-shadow: inset 3px 0 5px rgba(0, 0, 0, 0.25), inset 0 0 0 1px rgba(180, 190, 254, 0.4);
+}
+.bldg-car.doors-open {
+    box-shadow: 0 3px 10px rgba(0, 0, 0, 0.55), inset 0 0 0 2px #f9e2af,
+        0 0 14px rgba(249, 226, 175, 0.35);
+}
+.bldg-car.doors-open::before { transform: translateX(-100%); }
+.bldg-car.doors-open::after { transform: translateX(100%); }
 
 .bldg-riders {
+    position: relative;
+    z-index: 1;
     display: flex;
     flex-wrap: wrap;
     gap: 2px;
@@ -770,14 +861,15 @@ main {
 #building .banner {
     position: sticky;
     bottom: 0.4rem;
-    margin-top: 0.5rem;
+    margin-top: 0.6rem;
     padding: 0.5rem 1.2rem;
     border-radius: 10px;
     font-weight: 700;
     text-align: center;
+    box-shadow: 0 6px 18px rgba(0, 0, 0, 0.4);
 }
-#building .banner.success { background: #a6e3a1; color: #14351a; }
-#building .banner.failure { background: #f38ba8; color: #40101f; }
+#building .banner.success { background: linear-gradient(180deg, #b6f0ac, #a6e3a1); color: #14351a; }
+#building .banner.failure { background: linear-gradient(180deg, #f79bb4, #f38ba8); color: #40101f; }
 
 @media (max-width: 700px) {
     main { flex-direction: column; }

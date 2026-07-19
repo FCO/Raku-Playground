@@ -64,7 +64,13 @@ export class World {
         this.arrowFacing = facing;
         this.shownCollected = 0;
         this.finalResult = null;  // the worker's result, set before playback
+        this.aborted = false;     // set by abort() to halt playback (Stop button)
     }
+
+    // Stop the sleep-paced playback loop mid-animation (main-thread replay runs
+    // after the worker is already idle, so this — not runtime.cancel — is what
+    // the Stop button needs to interrupt a run in progress).
+    abort() { this.aborted = true; }
 
     // ---------- rendering ----------
 
@@ -250,8 +256,8 @@ export class World {
     }
 
     async playAll(stepMs) {
-        while (await this.stepOnce(stepMs)) { /* keep stepping */ }
-        this.finish();
+        while (!this.aborted && await this.stepOnce(stepMs)) { /* keep stepping */ }
+        if (!this.aborted) this.finish();
     }
 
     finish() {
