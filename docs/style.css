@@ -871,6 +871,82 @@ main {
 #building .banner.success { background: linear-gradient(180deg, #b6f0ac, #a6e3a1); color: #14351a; }
 #building .banner.failure { background: linear-gradient(180deg, #f79bb4, #f38ba8); color: #40101f; }
 
+/* ---------- snake arena ---------- */
+
+#arena {
+    flex: 1.4;
+    min-height: 0;
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    background:
+        radial-gradient(120% 80% at 50% -10%, rgba(166, 227, 161, 0.14), transparent 60%),
+        linear-gradient(#16221b, #0d1512);
+    border-bottom: 1px solid #313244;
+    overflow: auto;
+    padding: 0.6rem;
+    color: #cdd6f4;
+}
+
+.arena-stage {
+    flex: 1;
+    display: grid;
+    place-items: center;
+    width: 100%;
+}
+
+.arena-grid {
+    position: relative;
+    margin: auto;
+    /* 22px cells (CELL in snake-engine.js) drawn as a checkerboard */
+    background:
+        repeating-conic-gradient(rgba(255, 255, 255, 0.028) 0% 25%, transparent 0% 50%) 0 0 / 44px 44px;
+    border-radius: 8px;
+    box-shadow: 0 14px 34px rgba(0, 0, 0, 0.45), inset 0 0 0 1px rgba(166, 227, 161, 0.18);
+}
+
+.arena-seg, .arena-food {
+    position: absolute;
+    width: 20px;               /* CELL - 2 */
+    height: 20px;
+    box-sizing: border-box;
+    border-radius: 5px;
+}
+
+/* snake body segments; head brighter, id 0 = you (green), id 1 = rival (red) */
+.arena-seg.s0 { background: #74c98f; box-shadow: inset 0 0 0 1px rgba(20, 53, 26, 0.4); }
+.arena-seg.s0.head { background: #a6e3a1; box-shadow: 0 0 8px rgba(166, 227, 161, 0.6), inset 0 0 0 1px #14351a; border-radius: 7px; }
+.arena-seg.s1 { background: #d67a8e; box-shadow: inset 0 0 0 1px rgba(64, 16, 31, 0.4); }
+.arena-seg.s1.head { background: #f38ba8; box-shadow: 0 0 8px rgba(243, 139, 168, 0.6), inset 0 0 0 1px #40101f; border-radius: 7px; }
+.arena-seg.dead { background: #6c7086 !important; box-shadow: none !important; opacity: 0.6; }
+
+.arena-food {
+    background: radial-gradient(circle at 50% 32%, #ffd3b0, #fab387);
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.5), inset 0 1px 1px rgba(255, 255, 255, 0.5);
+    border-radius: 50%;
+    animation: arena-pop 0.25s cubic-bezier(0.34, 1.56, 0.64, 1) both;
+}
+.arena-food.eaten { transition: transform 0.2s, opacity 0.2s; transform: scale(1.6); opacity: 0; }
+
+@keyframes arena-pop {
+    0% { transform: scale(0); }
+    100% { transform: scale(1); }
+}
+
+#arena .banner {
+    position: sticky;
+    bottom: 0.4rem;
+    margin-top: 0.6rem;
+    padding: 0.5rem 1.2rem;
+    border-radius: 10px;
+    font-weight: 700;
+    text-align: center;
+    box-shadow: 0 6px 18px rgba(0, 0, 0, 0.4);
+}
+#arena .banner.success { background: linear-gradient(180deg, #b6f0ac, #a6e3a1); color: #14351a; }
+#arena .banner.failure { background: linear-gradient(180deg, #f79bb4, #f38ba8); color: #40101f; }
+
 @media (max-width: 700px) {
     main { flex-direction: column; }
     /* compact header: the controls otherwise stack four rows tall */

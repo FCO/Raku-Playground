@@ -29,6 +29,11 @@ const RX = "@@RX@@";
 // to animate. ASCII-only, like @@RX@@, so NQP_STDOUT's HTML-encoding leaves it
 // intact.
 const EV = "@@EV@@";
+// The snake saga uses the same channel with its own ASCII sentinel: one line per
+// tick, ';'-separated events of '|'-separated integer fields ("type|t|arg…").
+// Parsed here, fed to the SnakePresenter (honest result), and forwarded as
+// commands for the main thread to animate.
+const SN = "@@SN@@";
 self.NQP_STDOUT = (s) => {
     s = String(s);
     if (s.startsWith(RX)) {
@@ -42,7 +47,7 @@ self.NQP_STDOUT = (s) => {
         });
         return;
     }
-    if (s.startsWith(EV)) {
+    if (s.startsWith(EV) || s.startsWith(SN)) {
         for (const chunk of s.slice(EV.length).trimEnd().split(";")) {
             if (!chunk) continue;
             const parts = chunk.split("|");
@@ -75,6 +80,44 @@ class ElevatorPresenter {
         if (g.maxMoves) success = success && this.moves <= g.maxMoves;
         if (g.maxWait) success = success && maxWait <= g.maxWait * 1000;
         return { success, transported: this.transported, moves: this.moves, maxWait, avgWait, elapsed: this.elapsed };
+    }
+}
+
+// Tallies the snake event stream into an honest pass/fail. Length/food/death
+// come straight from the (trusted) engine's events, so the result is independent
+// of what the user's move() claims. Player is snake id 0.
+class SnakePresenter {
+    constructor(goal) {
+        this.goal = goal || {};
+        this.tick = 0;
+        this.food = {};     // snakeId -> food eaten
+        this.maxLen = {};   // snakeId -> max length seen
+        this.dead = {};     // snakeId -> true
+        this.ended = false; // saw the engine's 'e' event → a full sim actually ran
+    }
+    event(ev) {
+        if (ev.t > this.tick) this.tick = ev.t;
+        const s = ev.a[0];
+        if (ev.ev === "x") this.food[s] = (this.food[s] || 0) + 1;
+        else if (ev.ev === "k") this.maxLen[s] = Math.max(this.maxLen[s] || 0, ev.a[1]);
+        else if (ev.ev === "d") this.dead[s] = true;
+        else if (ev.ev === "e") this.ended = true;
+    }
+    result() {
+        const g = this.goal;
+        const alive = !this.dead[0];
+        const food = this.food[0] || 0;
+        const length = this.maxLen[0] || 0;
+        // A level can only pass if the engine ran to completion (emitted 'e').
+        // A compile/runtime error throws out of evalP6 before that, so it must
+        // fail — never let "no death event seen" read as "survived".
+        let success = false;
+        if (this.ended) {
+            if (g.food != null) success = food >= g.food;          // death after eating still counts
+            else if (g.length != null) success = length >= g.length;
+            else success = alive && this.tick >= (g.survive || 0);  // survive to the goal tick
+        }
+        return { success, ended: this.ended, alive: this.ended && alive, food, length, ticks: this.tick, opponentDead: !!this.dead[1] };
     }
 }
 
@@ -160,7 +203,9 @@ self.onmessage = (e) => {
     const msg = e.data;
     if (msg.type !== "run") return;
     sim = msg.level
-        ? (msg.level.sim === "elevator" ? new ElevatorPresenter(msg.level.goal) : new self.WorldSim(msg.level))
+        ? (msg.level.sim === "elevator" ? new ElevatorPresenter(msg.level.goal)
+            : msg.level.sim === "snake" ? new SnakePresenter(msg.level.goal)
+            : new self.WorldSim(msg.level))
         : null;
     running = true;
     try {

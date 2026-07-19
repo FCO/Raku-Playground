@@ -50,7 +50,7 @@ const clearOutput = (page) => page.click("#clear");
 // the dom strip.
 function bannerState(page) {
     return page.evaluate(() => {
-        const el = [...document.querySelectorAll("#world .banner, #building .banner, #dom-banner")]
+        const el = [...document.querySelectorAll("#world .banner, #building .banner, #arena .banner, #dom-banner")]
             .find((b) => !b.hidden && b.offsetParent !== null);
         return el ? {
             text: el.textContent,

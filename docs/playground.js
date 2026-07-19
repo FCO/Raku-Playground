@@ -5,6 +5,7 @@ import {
 import { runtime } from "./raku-runtime.js";
 import { World, PRELUDE, sleep, nextLevelButton } from "./world.js";
 import { Building, ELEVATOR_ENGINE } from "./elevator-engine.js";
+import { Arena, SNAKE_ENGINE } from "./snake-engine.js";
 import { SAGAS } from "./sagas/index.js";
 import { startTour, maybeAutoStartTour } from "./tour.js";
 
@@ -23,11 +24,13 @@ const outputEl = document.getElementById("output");
 const previewEl = document.getElementById("preview");
 const worldEl = document.getElementById("world");
 const buildingEl = document.getElementById("building");
+const arenaEl = document.getElementById("arena");
 
 const SAMPLE = `say "Hello from Raku! \u{1F98B}";\nsay [+] 1..10;\n`;
 
 let world = null;       // active World in puzzle mode, null otherwise
 let building = null;    // active Building in elevator mode, null otherwise
+let arena = null;       // active Arena in snake mode, null otherwise
 let domLevel = null;    // active dom-type level (preview-pane world), null otherwise
 let playing = false;    // animation playback (or step session) in progress
 let stepSession = false;
@@ -49,6 +52,7 @@ runtime.onStderr = (text) => appendOutput(text.endsWith("\n") ? text : text + "\
 runtime.onCommand = (cmd) => {
     if (world) world.commands.push(cmd);
     else if (building) building.events.push(cmd);
+    else if (arena) arena.events.push(cmd);
 };
 // Grammars: a highlight payload the worker computed; draw it into the preview.
 runtime.onRender = (payload) => renderMatches(payload);
@@ -171,13 +175,14 @@ let currentLevel = "0";
 
 // One place owns the per-mode UI state and cross-mode teardown; the drift
 // between hand-maintained flag blocks was a bug factory.
-function applyMode(mode) { // "puzzle" | "elevator" | "dom" | "free"
+function applyMode(mode) { // "puzzle" | "elevator" | "snake" | "dom" | "free"
     stepSession = false;
     stepping = false;
     domBanner.hidden = true;
-    const animated = mode === "puzzle" || mode === "elevator"; // has speed/step + a stage
+    const animated = mode === "puzzle" || mode === "elevator" || mode === "snake"; // has speed/step + a stage
     worldEl.hidden = mode !== "puzzle";
     buildingEl.hidden = mode !== "elevator";
+    arenaEl.hidden = mode !== "snake";
     previewEl.hidden = animated;
     speedSelect.hidden = !animated;
     stepButton.hidden = !animated;
@@ -189,6 +194,10 @@ function applyMode(mode) { // "puzzle" | "elevator" | "dom" | "free"
     if (mode !== "elevator") {
         building = null;
         buildingEl.replaceChildren();
+    }
+    if (mode !== "snake") {
+        arena = null;
+        arenaEl.replaceChildren();
     }
     if (mode !== "dom") domLevel = null;
 }
@@ -239,7 +248,10 @@ function setLevel(value) {
 
     const idx = Number(value);
     const level = currentSaga.levels[idx];
-    const mode = level.type === "dom" ? "dom" : level.type === "elevator" ? "elevator" : "puzzle";
+    const mode = level.type === "dom" ? "dom"
+        : level.type === "elevator" ? "elevator"
+        : level.type === "snake" ? "snake"
+        : "puzzle";
     applyMode(mode);
 
     const onNext = idx + 1 < currentSaga.levels.length ? () => setLevel(String(idx + 1)) : null;
@@ -250,6 +262,11 @@ function setLevel(value) {
         building.onFinished = (res) => { if (res.success) markComplete(idx); };
         building.onNext = onNext;
         building.render();
+    } else if (mode === "snake") {
+        arena = new Arena(level, arenaEl);
+        arena.onFinished = (res) => { if (res.success) markComplete(idx); };
+        arena.onNext = onNext;
+        arena.render();
     } else {
         world = new World(level, worldEl);
         world.onFinished = (res) => { if (res.success) markComplete(idx); };
@@ -414,11 +431,30 @@ function elevatorConfig(level) {
         + `my $GOAL-T = ${g.time}; my $MAX-MOVES = ${g.maxMoves || 0}; my $MAX-WAIT = ${g.maxWait || 0};`;
 }
 
+const DIR_NUM = { up: 0, right: 1, down: 2, left: 3 };
+const dirNum = (d) => (typeof d === "number" ? d : DIR_NUM[d] ?? 0);
+
+// Snake: like elevatorConfig, one physical line so user code keeps its line
+// numbers. Level fields → Raku constants the engine reads.
+function snakeConfig(level) {
+    const b = level.budget || {};
+    const s = level.start || { x: Math.floor(level.W / 2), y: Math.floor(level.H / 2), dir: "up" };
+    const o = level.opponent || null;
+    return `my $W = ${level.W}; my $H = ${level.H}; my $SEED = ${level.seed}; `
+        + `my $TICKS = ${level.ticks}; my $FOOD = ${level.food ?? 3}; `
+        + `my $SX = ${s.x}; my $SY = ${s.y}; my $SDIR = ${dirNum(s.dir)}; `
+        + `my $OPP = ${o ? 1 : 0}; my $OX = ${o ? o.x : 0}; my $OY = ${o ? o.y : 0}; my $ODIR = ${o ? dirNum(o.dir) : 0}; `
+        + `my $ODELAY = ${o ? (o.delay || 0) : 0}; `
+        + `my $STOP-FOOD = ${b.food || 0}; my $STOP-LEN = ${b.length || 0};`;
+}
+
 function buildSource() {
     const src = editor.state.doc.toString();
     // Elevator: user code first (keeps line numbers), then config, then the
     // engine — which ends by calling the user's init/update.
     if (building) return [src, elevatorConfig(building.level), ELEVATOR_ENGINE].join("\n");
+    // Snake: same shape — user code, then config, then the engine (calls move()).
+    if (arena) return [src, snakeConfig(arena.level), SNAKE_ENGINE].join("\n");
     // any saga may carry a prelude; puzzle levels get the command PRELUDE first
     const parts = [];
     if (world) parts.push(PRELUDE);
@@ -432,6 +468,7 @@ async function runUserCode() {
     let level = null;
     if (world) level = { grid: world.level.grid, start: world.level.start };
     else if (building) level = { sim: "elevator", goal: building.level.budget };
+    else if (arena) level = { sim: "snake", goal: arena.level.budget };
     const result = await runtime.run(buildSource(), level);
     if (world) {
         world.finalResult = result;
@@ -440,6 +477,8 @@ async function runUserCode() {
         if (result) world.sim = result;
     } else if (building) {
         building.finalResult = result;
+    } else if (arena) {
+        arena.finalResult = result;
     }
 }
 
@@ -452,6 +491,9 @@ async function record() {
     } else if (building) {
         building.reset();
         building.render();
+    } else if (arena) {
+        arena.reset();
+        arena.render();
     } else {
         previewEl.replaceChildren();
         domBanner.hidden = true;
@@ -472,6 +514,7 @@ async function runCode() {
         await record();
         if (world) await world.playAll(Number(speedSelect.value));
         else if (building) await building.playAll(Number(speedSelect.value));
+        else if (arena) await arena.playAll(Number(speedSelect.value));
         else if (domLevel) showDomResult();
     } finally {
         playing = false;
@@ -480,7 +523,7 @@ async function runCode() {
 }
 
 async function stepCode() {
-    const stage = world || building;
+    const stage = world || building || arena;
     if (!stage) return;
     if (!stepSession) {
         if (runtime.state !== "ready" || playing) return;
@@ -683,7 +726,7 @@ stopButton.addEventListener("click", () => {
     // Halt main-thread playback (the elevator/puzzle replay runs after the worker
     // is idle). playAll bails out and its finally clears `playing`; a step session
     // has no loop awaiting, so end it here.
-    (world || building)?.abort();
+    (world || building || arena)?.abort();
     if (stepSession && !stepping) {
         playing = false;
         stepSession = false;
@@ -715,6 +758,7 @@ window.__playground = {
     setLevel: (v) => (String(v) === "free" ? setSaga("free") : setLevel(String(v))),
     getWorld: () => world,
     getBuilding: () => building,
+    getArena: () => arena,
     isPlaying: () => playing,
     sagas: SAGAS,
     get levels() { return currentSaga.levels; },
