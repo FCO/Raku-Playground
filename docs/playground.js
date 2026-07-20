@@ -4,6 +4,7 @@ import {
 } from "./vendor/codemirror.js";
 import { runtime } from "./raku-runtime.js";
 import { World, PRELUDE, sleep, nextLevelButton } from "./world.js";
+import { WORLD_ENGINE, worldConfig } from "./world-engine.js";
 import { Building, ELEVATOR_ENGINE } from "./elevator-engine.js";
 import { Arena, SNAKE_ENGINE } from "./snake-engine.js";
 import { SAGAS } from "./sagas/index.js";
@@ -145,10 +146,16 @@ function loadProgress() {
     progress = new Set(Array.isArray(stored) ? stored : []);
 }
 
+// A level the active runtime can't run (flagged perl6Only, on rakupp) must not
+// block progression — treat it as satisfied so the levels after it stay playable.
+function levelBlocked(i) {
+    return runtime.runtimeName === "rakupp" && !!currentSaga.levels[i] && currentSaga.levels[i].perl6Only;
+}
+
 // first level not yet completed — the furthest one that may be played
 function maxUnlocked() {
     let i = 0;
-    while (progress.has(i)) i++;
+    while (progress.has(i) || levelBlocked(i)) i++;
     return i;
 }
 
@@ -165,7 +172,7 @@ function refreshLevelLabels() {
         const i = Number(opt.value);
         const locked = i > max;
         opt.disabled = locked;
-        opt.textContent = `${progress.has(i) ? "✓ " : locked ? "🔒 " : ""}${i + 1}. ${currentSaga.levels[i].name}`;
+        opt.textContent = `${progress.has(i) ? "✓ " : levelBlocked(i) ? "⚠ " : locked ? "🔒 " : ""}${i + 1}. ${currentSaga.levels[i].name}`;
     }
 }
 
@@ -448,19 +455,27 @@ function snakeConfig(level) {
         + `my $STOP-FOOD = ${b.food || 0}; my $STOP-LEN = ${b.length || 0};`;
 }
 
+// Returns { source, lineOffset } — lineOffset is how many lines were prepended
+// before the user's code, so the worker can correct rakupp's error line numbers.
 function buildSource() {
     const src = editor.state.doc.toString();
     // Elevator: user code first (keeps line numbers), then config, then the
     // engine — which ends by calling the user's init/update.
-    if (building) return [src, elevatorConfig(building.level), ELEVATOR_ENGINE].join("\n");
+    if (building) return { source: [src, elevatorConfig(building.level), ELEVATOR_ENGINE].join("\n"), lineOffset: 0 };
     // Snake: same shape — user code, then config, then the engine (calls move()).
-    if (arena) return [src, snakeConfig(arena.level), SNAKE_ENGINE].join("\n");
-    // any saga may carry a prelude; puzzle levels get the command PRELUDE first
+    if (arena) return { source: [src, snakeConfig(arena.level), SNAKE_ENGINE].join("\n"), lineOffset: 0 };
+    // Puzzle world: perl6 uses the one-line JS-bridge PRELUDE (+ the worker's
+    // WorldSim); rakupp has no JS bridge, so the whole sim runs in Raku — prepend
+    // the level config then WORLD_ENGINE. Any saga prelude next, user code last.
     const parts = [];
-    if (world) parts.push(PRELUDE);
+    if (world) {
+        if (runtime.runtimeName === "rakupp") { parts.push(worldConfig(world.level), WORLD_ENGINE); }
+        else parts.push(PRELUDE);
+    }
     if ((world || domLevel) && currentSaga.prelude) parts.push(currentSaga.prelude);
+    const prefix = parts.join("\n");
     parts.push(src);
-    return parts.join("\n");
+    return { source: parts.join("\n"), lineOffset: prefix ? prefix.split("\n").length : 0 };
 }
 
 // Runs in the worker; puzzle/elevator events stream into the stage via onCommand.
@@ -469,7 +484,8 @@ async function runUserCode() {
     if (world) level = { grid: world.level.grid, start: world.level.start };
     else if (building) level = { sim: "elevator", goal: building.level.budget };
     else if (arena) level = { sim: "snake", goal: arena.level.budget };
-    const result = await runtime.run(buildSource(), level);
+    const { source, lineOffset } = buildSource();
+    const result = await runtime.run(source, level, lineOffset);
     if (world) {
         world.finalResult = result;
         // Expose the final sim snapshot now (before playback/step animates), so
@@ -614,6 +630,21 @@ const editor = new EditorView({
         themeCompartment.of([]),  // filled in once the Shiki highlighter is ready
     ],
 });
+
+// ---------- Runtime chooser (perl6.js ↔ rakupp) ----------
+// Switching runtime needs a fresh worker, so persist the choice and reload with
+// an explicit ?runtime= (authoritative over any stale param already in the URL).
+const RUNTIME_KEY = "raku-playground-runtime";
+const runtimeSelect = document.getElementById("runtime");
+if (runtimeSelect) {
+    runtimeSelect.value = runtime.runtimeName;
+    runtimeSelect.addEventListener("change", () => {
+        storageSet(RUNTIME_KEY, runtimeSelect.value);
+        const url = new URL(location.href);
+        url.searchParams.set("runtime", runtimeSelect.value);
+        location.href = url.toString();
+    });
+}
 
 // ---------- Raku highlighting + theme chooser (Shiki) ----------
 

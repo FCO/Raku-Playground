@@ -33,6 +33,9 @@ const LEVELS = [
     {
         type: "dom",
         name: "Words, Not Strings",
+        // rakupp's interpolating word-quote (« »/<< >>) doesn't interpolate, so
+        // this level needs perl6.js. Non-blocking on rakupp (see levelBlocked).
+        perl6Only: true,
         goal: "Build word lists with < > — and with « » when a word needs interpolation or spaces.",
         steps: [
             "<ruby emerald sapphire> is a list of three words — no quotes, no commas.",

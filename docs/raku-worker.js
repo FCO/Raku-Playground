@@ -7,8 +7,16 @@
 // globals — so the puzzle bridge (self.PG) and stdout work exactly as on main.
 
 const BUILD = new URLSearchParams(self.location.search).get("v") || "dev";
+// Which Raku runtime to load: "perl6" (Rakudo→JS, docs/perl6.js — the default)
+// or "rakupp" (the C++ interpreter compiled to WASM, docs/rakujs.*). The main
+// thread picks it (URL param / localStorage) and passes it on our own URL.
+const RUNTIME = new URLSearchParams(self.location.search).get("runtime") || "perl6";
 // Decompressed size of perl6.js, for the download %; see raku-runtime.js.
 const ESTIMATED_UNCOMPRESSED_BYTES = 77_540_424;
+// How many lines the puzzle/dom preludes prepend to the user's source on the
+// rakupp path — subtracted from rakupp's "line N" errors so reported line
+// numbers point back at the user's own code. Set per run.
+let rakuppLineOffset = 0;
 
 // perl6.js reaches NQP_STDOUT via the global; alias window→self so its
 // main-thread access pattern resolves. NQP_STDOUT must exist before it loads.
@@ -34,7 +42,16 @@ const EV = "@@EV@@";
 // Parsed here, fed to the SnakePresenter (honest result), and forwarded as
 // commands for the main thread to animate.
 const SN = "@@SN@@";
-self.NQP_STDOUT = (s) => {
+// The puzzle world on the rakupp runtime streams one command per line with its
+// own ASCII sentinel (rakupp has no JS bridge, so — like elevator/snake — the
+// whole sim runs in Raku and reports via stdout). WorldPresenter parses these.
+const PZ = "@@PZ@@";
+
+// Handle the sentinel lines both runtimes emit through stdout. Returns true when
+// the line was a sentinel we consumed (render/command); false for ordinary
+// program output the caller should forward as stdout. Shared by perl6's
+// NQP_STDOUT and rakupp's print callback.
+function dispatchLine(s) {
     s = String(s);
     if (s.startsWith(RX)) {
         const [cps, ranges] = s.slice(RX.length).trimEnd().split("@");
@@ -45,7 +62,7 @@ self.NQP_STDOUT = (s) => {
                 ranges: ranges ? ranges.split(";").filter(Boolean).map((r) => r.split(",").map(Number)) : [],
             },
         });
-        return;
+        return true;
     }
     if (s.startsWith(EV) || s.startsWith(SN)) {
         for (const chunk of s.slice(EV.length).trimEnd().split(";")) {
@@ -56,10 +73,54 @@ self.NQP_STDOUT = (s) => {
             if (sim && sim.event) sim.event(cmd);
             self.postMessage({ type: "command", cmd });
         }
-        return;
+        return true;
     }
-    self.postMessage({ type: "stdout", text: s });
+    if (s.startsWith(PZ)) {
+        const cmd = sim && sim.event ? sim.event(s.slice(PZ.length).trimEnd()) : null;
+        if (cmd) self.postMessage({ type: "command", cmd });
+        return true;
+    }
+    return false;
+}
+
+self.NQP_STDOUT = (s) => {
+    s = String(s);
+    if (!dispatchLine(s)) self.postMessage({ type: "stdout", text: s });
 };
+
+// Tallies the rakupp puzzle-world command stream (@@PZ@@ lines) into the same
+// result the perl6 WorldSim produces, and reconstructs the command objects
+// docs/world.js animates — so playback is identical on both runtimes. Position
+// and gem count come from the trusted engine's events, not the user's code.
+class WorldPresenter {
+    constructor(level) {
+        this.totalGems = level.grid.join("").split("G").length - 1;
+        const s = level.start;
+        this.x = s.x; this.y = s.y; this.facing = s.facing;
+        this.dead = false; this.collected = 0;
+    }
+    // Parse one @@PZ@@ payload; update the tally; return the command object to
+    // animate (same shapes as WorldSim.command), or null (runaway marker "X").
+    event(line) {
+        const p = line.split("|");
+        switch (p[0]) {
+            case "m":  this.x = +p[1]; this.y = +p[2]; return { name: "move-forward", x: this.x, y: this.y };
+            case "mb": return { name: "move-forward", bump: true, facing: p[1] };
+            // fall: Camelia dies but keeps her last safe position (matches WorldSim).
+            case "mf": this.dead = true; return { name: "move-forward", fall: true, x: +p[1], y: +p[2] };
+            case "tl": this.facing = p[1]; return { name: "turn-left", facing: p[1] };
+            case "tr": this.facing = p[1]; return { name: "turn-right", facing: p[1] };
+            case "cg": this.collected++; return { name: "collect-gem", got: true, x: +p[1], y: +p[2] };
+            case "cn": return { name: "collect-gem", got: false, x: +p[1], y: +p[2] };
+            default: return null;
+        }
+    }
+    result() {
+        const base = { x: this.x, y: this.y, facing: this.facing, dead: this.dead, collected: this.collected };
+        if (this.dead) return { ...base, success: false, fell: true };
+        return { ...base, success: this.collected === this.totalGems, fell: false };
+    }
+}
 
 // Tallies the elevator event stream into a result the `done` message reports.
 // Transported/moves/waits come straight from the (trusted) engine's events, so
@@ -143,7 +204,52 @@ self.PG = {
     query: (name) => (sim ? sim.query(name) : 0),
 };
 
+// ---- rakupp (Raku.js / WASM) runtime -------------------------------------
+// rakujs.js is a MODULARIZEd Emscripten build exposing the RakuJS factory; a
+// module runs Raku via ccall('rakupp_run', …) and streams output through the
+// print/printErr callbacks we install here. Output is plain text (not the HTML
+// perl6.js emits), so we tag stdout `plain` for the main thread.
+let rakuppModule = null;
+
+// Rewrite rakupp's "line N" (parse errors / die) to point at the user's code by
+// subtracting the prepended prelude lines. No-op when nothing was prepended.
+const correctLines = (t) =>
+    rakuppLineOffset
+        ? String(t).replace(/\bline (\d+)\b/g, (_m, n) => `line ${Math.max(1, Number(n) - rakuppLineOffset)}`)
+        : String(t);
+
+// (Re)build a fresh module instance. Its print/printErr forward straight to the
+// main thread during a run; outside a run they're Emscripten's own load-time
+// diagnostics, kept in the devtools console.
+function initRakupp() {
+    return RakuJS({
+        locateFile: (p) => `${p}?v=${BUILD}`,
+        print: (t) => {
+            const s = t + "\n";
+            if (!dispatchLine(s)) self.postMessage({ type: "stdout", text: s, plain: true });
+        },
+        printErr: (t) => {
+            if (running || Date.now() < stderrOpenUntil)
+                self.postMessage({ type: "stderr", text: correctLines(t) + "\n" });
+            else console.warn(t);
+        },
+    }).then((m) => { rakuppModule = m; return m; });
+}
+
+async function loadRakupp() {
+    try {
+        importScripts(`rakujs.js?v=${BUILD}`); // defines self.RakuJS
+        self.postMessage({ type: "progress", fraction: 0.5, phase: "download" });
+        await initRakupp();
+        self.postMessage({ type: "progress", fraction: 1, phase: "compile" });
+        self.postMessage({ type: "ready" });
+    } catch (e) {
+        self.postMessage({ type: "load-error", message: String(e && (e.stack || e.message || e)) });
+    }
+}
+
 async function load() {
+    if (RUNTIME === "rakupp") return loadRakupp();
     try {
         // Single-file build: world-sim.js and perl6.js are concatenated into
         // this worker's blob (after this glue), so there's nothing to fetch —
@@ -205,9 +311,33 @@ self.onmessage = (e) => {
     sim = msg.level
         ? (msg.level.sim === "elevator" ? new ElevatorPresenter(msg.level.goal)
             : msg.level.sim === "snake" ? new SnakePresenter(msg.level.goal)
+            // Puzzle world: rakupp runs the whole sim in Raku (@@PZ@@ stream →
+            // WorldPresenter); perl6 answers the JS bridge from WorldSim.
+            : RUNTIME === "rakupp" ? new WorldPresenter(msg.level)
             : new self.WorldSim(msg.level))
         : null;
+    rakuppLineOffset = msg.lineOffset || 0;
     running = true;
+
+    if (RUNTIME === "rakupp") {
+        try {
+            if (!rakuppModule) throw new Error("rakupp module not loaded");
+            // Synchronous, like evalP6 — runs the whole program to completion.
+            rakuppModule.ccall("rakupp_run", "number", ["string", "string"], [msg.source, ""]);
+        } catch (err) {
+            // A stack overflow / abort leaves the instance unusable — drop it and
+            // rebuild a clean one for the next run (mirrors rakupp's own worker).
+            rakuppModule = null;
+            self.postMessage({ type: "stderr", text: err && err.message ? err.message : String(err) });
+            initRakupp().catch(() => {});
+        } finally {
+            running = false;
+            stderrOpenUntil = Date.now() + 250;
+            self.postMessage({ type: "done", id: msg.id, result: sim ? sim.result() : null });
+        }
+        return;
+    }
+
     try {
         self.evalP6(msg.source);
     } catch (err) {

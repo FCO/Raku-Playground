@@ -118,6 +118,9 @@ const LEVELS = [
     {
         type: "dom",
         name: "Lazy Sequences",
+        // rakupp's sequence operator (...) doesn't deduce geometric/arithmetic
+        // rules (same class of gap as rakudo.js), so this level needs perl6.js.
+        perl6Only: true,
         goal: "Define ALL the Fibonacci numbers — then take only what you need.",
         steps: [
             "(1..Inf) is EVERY positive integer — .map and .grep over it stay lazy.",

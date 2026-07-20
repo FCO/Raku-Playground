@@ -8,6 +8,16 @@
 // async and resolves with the puzzle result (or null).
 
 const BUILD = (typeof window !== "undefined" && window.__BUILD__) || "dev";
+// Which Raku runtime to load. "perl6" (Rakudo→JS, docs/perl6.js) is the default;
+// "rakupp" (the WASM C++ interpreter, docs/rakujs.*) is opt-in via ?runtime= or a
+// persisted choice. Passed to the worker on its URL; the worker forks on it.
+const RUNTIME = (() => {
+    try {
+        const fromUrl = new URLSearchParams(location.search).get("runtime");
+        if (fromUrl) return fromUrl;
+        return localStorage.getItem("raku-playground-runtime") || "perl6";
+    } catch (_) { return "perl6"; }
+})();
 // Wall-clock guard: a `loop { }` that issues no commands spins the worker
 // forever (the per-command guard never trips). The UI stays live, but auto-kill
 // the zombie so a forgotten tab doesn't leak a busy thread.
@@ -50,7 +60,7 @@ function spawn() {
     const embedded = typeof document !== "undefined" && document.getElementById("worker-src");
     const workerUrl = embedded
         ? URL.createObjectURL(new Blob([embedded.textContent], { type: "text/javascript" }))
-        : `raku-worker.js?v=${BUILD}`;
+        : `raku-worker.js?v=${BUILD}&runtime=${encodeURIComponent(RUNTIME)}`;
     worker = new Worker(workerUrl);
     worker.onmessage = (e) => {
         const m = e.data;
@@ -58,7 +68,8 @@ function spawn() {
             case "progress": runtime.onProgress(m.fraction, m.phase); break;
             case "ready": changeState("ready"); break;
             case "load-error": changeState("error"); runtime.onStderr(m.message); break;
-            case "stdout": runtime.onStdout(decodeStdout(m.text)); break;
+            // rakupp emits plain text (m.plain); perl6 emits HTML we must decode.
+            case "stdout": runtime.onStdout(m.plain ? m.text : decodeStdout(m.text)); break;
             case "stderr": runtime.onStderr(m.text); break;
             case "command": runtime.onCommand(m.cmd); break;
             case "render": runtime.onRender(m.payload); break;
@@ -83,6 +94,10 @@ function spawn() {
 export const runtime = {
     get state() { return state; },
 
+    // "perl6" | "rakupp" — playground.js reads this to pick the puzzle prelude
+    // (JS-bridge PRELUDE for perl6, the in-Raku WORLD_ENGINE for rakupp).
+    get runtimeName() { return RUNTIME; },
+
     onStateChange(cb) { listeners.push(cb); },
 
     // Overridable sinks.
@@ -101,7 +116,7 @@ export const runtime = {
 
     // Async: resolves with the puzzle result ({success, fell, collected}) or
     // null. Commands stream via onCommand while it runs; the UI stays free.
-    run(source, level = null) {
+    run(source, level = null, lineOffset = 0) {
         if (state !== "ready")
             throw new Error(`Raku runtime: can't run in state ${state}`);
         changeState("running");
@@ -114,7 +129,9 @@ export const runtime = {
                 if (pending && pending.id === id) { pending = null; resolve(null); }
             }, budget);
             pending = { id, resolve, timer };
-            worker.postMessage({ type: "run", id, source, level });
+            // lineOffset lets the worker correct rakupp's error line numbers for
+            // any prelude prepended to the user's source.
+            worker.postMessage({ type: "run", id, source, level, lineOffset });
         });
     },
 

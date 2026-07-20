@@ -37,6 +37,9 @@ const LEVELS = [
     {
         type: "dom",
         name: "Types of Your Own: subset",
+        // rakupp doesn't apply a subset's where-constraint on smartmatch
+        // (4 ~~ Even is False), so this level needs perl6.js.
+        perl6Only: true,
         goal: "Mint an Even type with a where-clause and let a signature enforce it.",
         steps: [
             "my subset Even of Int where * %% 2; — a new type in one line.",
@@ -126,6 +129,10 @@ const LEVELS = [
     {
         type: "dom",
         name: "Rewrite the Class at Runtime",
+        // The rakupp runtime's metamodel has no .^compose, so runtime method
+        // injection can't finalize there — this level needs perl6.js. The rakupp
+        // verification spec skips levels flagged perl6Only.
+        perl6Only: true,
         goal: "Give a finished class a brand-new method — while the program runs.",
         steps: [
             "Robot.^add_method('greet', my method greet { … }) injects a method object — naming it makes introspection honest.",
