@@ -1,0 +1,90 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Raku Playground — WebKit 3D board test</title>
+<style>
+  body { font-family: system-ui, sans-serif; margin: 0; padding: 1rem; background: #1e1e2e; color: #e6e6e6; }
+  h1 { font-size: 1.15rem; }
+  p.intro { max-width: 44rem; line-height: 1.5; }
+  .grid { display: flex; flex-wrap: wrap; gap: 1rem; }
+  .card { background: #2a2a3c; border: 1px solid #444; border-radius: 10px; padding: 0.6rem; width: 230px; }
+  .card h2 { font-size: 0.95rem; margin: 0 0 0.2rem; }
+  .card .desc { font-size: 0.72rem; color: #b9b9c9; min-height: 2.4em; margin: 0 0 0.4rem; }
+  .stage { height: 230px; background: linear-gradient(#8ec9f0, #cfeafe 70%);
+           border-radius: 8px; overflow: hidden; }
+
+  /* ---- shared board bits (mirrors docs/style.css) ---- */
+  .scene { width: 100%; height: 100%; display: grid; place-items: center; }
+  .board { position: relative; width: 64px; height: 256px; transform-style: preserve-3d; }
+  .tile { position: absolute; left: 0; width: 64px; height: 64px; border-radius: 5px; }
+  .tile.path { background: linear-gradient(135deg,#e2c494,#c9a468); border: 1px solid #b08d55;
+               box-shadow: 6px 6px 0 #8a6a3d, inset 0 0 0 3px rgba(255,255,255,.18); }
+  .tile.rock { background: linear-gradient(135deg,#a9adb2,#7c8085); border: 1px solid #5f6367;
+               box-shadow: 6px 6px 0 #4a4d50, inset 0 0 0 3px rgba(255,255,255,.14); }
+  .sprite { position: absolute; left: 0; width: 64px; height: 64px; line-height: 64px;
+            text-align: center; transform-style: preserve-3d; }
+  .upright { display: inline-block; vertical-align: middle; line-height: normal; font-size: 28px; }
+
+  /* ==== VARIANT A: current (perspective on the grid parent) ==== */
+  .A .scene { perspective: 1100px; }
+  .A .board { transform: rotateX(55deg) rotateZ(45deg); }
+  .A .upright { transform: rotateZ(-45deg) rotateX(-55deg) translateY(-8px); }
+
+  /* ==== VARIANT B: perspective inside the board transform (off the grid) ==== */
+  .B .board { transform: perspective(1100px) rotateX(55deg) rotateZ(45deg); }
+  .B .upright { transform: rotateZ(-45deg) rotateX(-55deg) translateY(-8px); }
+
+  /* ==== VARIANT C: no perspective at all (orthographic) ==== */
+  .C .board { transform: rotateX(55deg) rotateZ(45deg); }
+  .C .upright { transform: rotateZ(-45deg) rotateX(-55deg) translateY(-8px); }
+
+  /* ==== VARIANT D: flatter tilt (rotateX 35°), perspective on parent ==== */
+  .D .scene { perspective: 1100px; }
+  .D .board { transform: rotateX(35deg) rotateZ(45deg); }
+  .D .upright { transform: rotateZ(-45deg) rotateX(-35deg) translateY(-8px); }
+
+  /* ==== VARIANT E: pure 2D isometric (no preserve-3d, no 3D rotation) ==== */
+  .E .board { transform: rotate(45deg) scaleY(.6); transform-style: flat; }
+  .E .tile, .E .sprite { transform-style: flat; }
+  .E .upright { transform: scaleY(1.667) rotate(-45deg); }
+</style>
+</head>
+<body>
+<h1>Raku Playground — which boards render on your browser?</h1>
+<p class="intro">
+  Each box below draws the same little corridor of tiles ending in a grey <b>ROCK</b> tile,
+  with a 💎 on one tile, using a different CSS 3-D technique. On the affected browser
+  (DuckDuckGo / older Safari) some boxes show everything and some show <b>blank blue</b> or a
+  missing rock. <b>Please note which letters (A–E) show the full corridor including the grey
+  rock tile and the gem</b>, and which are blank or missing pieces. That tells us the fix.
+</p>
+<div class="grid" id="grid"></div>
+
+<script>
+  const VARIANTS = [
+    ["A", "Current site (perspective on the grid container). Expected to fail on the affected browser."],
+    ["B", "Perspective moved into the board's own transform (off the grid container)."],
+    ["C", "No perspective — orthographic isometric."],
+    ["D", "Flatter tilt (35° instead of 55°)."],
+    ["E", "Pure 2-D isometric — no CSS 3-D at all."],
+  ];
+  const grid = document.getElementById("grid");
+  for (const [key, desc] of VARIANTS) {
+    const card = document.createElement("div");
+    card.className = "card";
+    card.innerHTML = `<h2>${key}</h2><p class="desc">${desc}</p>
+      <div class="stage ${key}"><div class="scene"><div class="board">
+        <div class="tile path" style="top:0"></div>
+        <div class="tile path" style="top:64px"></div>
+        <div class="tile path" style="top:128px"></div>
+        <div class="tile rock" style="top:192px"></div>
+        <div class="sprite" style="top:64px"><span class="upright">💎</span></div>
+        <div class="sprite" style="top:192px"><span class="upright">🪨</span></div>
+      </div></div></div>`;
+    grid.appendChild(card);
+  }
+</script>
+</body>
+</html>
