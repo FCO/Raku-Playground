@@ -343,10 +343,22 @@ main {
     border-radius: 5px;
 }
 
-#world .tile.path, #world .tile.rock {
+#world .tile.path {
     background: linear-gradient(135deg, #e2c494, #c9a468);
     border: 1px solid #b08d55;
     box-shadow: 6px 6px 0 #8a6a3d, inset 0 0 0 3px rgba(255, 255, 255, 0.18);
+}
+
+/* Rock tiles get a distinct stone colour so the obstacle stays visible even
+   when the 🪨 billboard sprite doesn't render: older WebKit (some iOS/macOS
+   and the DuckDuckGo browser) flattens the preserve-3d billboard onto the
+   board, and some emoji fonts lack U+1FAA8 (ROCK, 2020). The flat tile
+   composites reliably in every engine — unlike the 3D sprite on top of it —
+   so a rock always reads as an obstacle, glyph or no glyph. */
+#world .tile.rock {
+    background: linear-gradient(135deg, #a9adb2, #7c8085);
+    border: 1px solid #5f6367;
+    box-shadow: 6px 6px 0 #4a4d50, inset 0 0 0 3px rgba(255, 255, 255, 0.14);
 }
 
 #world .tile.water {
