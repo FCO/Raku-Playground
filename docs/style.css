@@ -326,14 +326,20 @@ main {
     flex: 1;
     display: grid;
     place-items: center;
-    perspective: 1100px;
+    /* Perspective is applied in .board's transform below, NOT here: WebKit
+       (Safari / DuckDuckGo) culls the 3D children — whole tiles, gems, the rock
+       — at the board's steep tilt when `perspective` sits on this grid
+       container. As the perspective() function on the board's own transform it
+       renders correctly on WebKit and looks identical everywhere else.
+       Confirmed on macOS 15.7.3 / DDG: grid-perspective vanishes, this doesn't. */
 }
 
 #world .board {
     position: relative;
     transform-style: preserve-3d;
-    /* --scale is set per-level by World.fitBoard() so the island fits the pane */
-    transform: scale(var(--scale, 1)) rotateX(var(--rotX)) rotateZ(var(--rotZ));
+    /* --scale is set per-level by World.fitBoard() so the island fits the pane.
+       perspective() must stay first (outermost) so it applies to the rotation. */
+    transform: perspective(1100px) scale(var(--scale, 1)) rotateX(var(--rotX)) rotateZ(var(--rotZ));
 }
 
 #world .tile {
