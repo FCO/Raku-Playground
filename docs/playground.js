@@ -469,7 +469,10 @@ function buildSource() {
     // the level config then WORLD_ENGINE. Any saga prelude next, user code last.
     const parts = [];
     if (world) {
-        if (runtime.runtimeName === "rakupp") { parts.push(worldConfig(world.level), WORLD_ENGINE); }
+        // rakupp and moar have no JS bridge, so the whole puzzle sim runs in
+        // Raku (worldConfig + WORLD_ENGINE, streamed via @@PZ@@ over stdout).
+        // Only perl6 (Rakudo→JS) uses the one-line JS-bridge PRELUDE.
+        if (runtime.runtimeName === "rakupp" || runtime.runtimeName === "moar") { parts.push(worldConfig(world.level), WORLD_ENGINE); }
         else parts.push(PRELUDE);
     }
     if ((world || domLevel) && currentSaga.prelude) parts.push(currentSaga.prelude);

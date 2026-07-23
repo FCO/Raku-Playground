@@ -4,11 +4,11 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Raku Playground</title>
-<link rel="stylesheet" href="style.css?v=dev">
+<link rel="stylesheet" href="style.css?v=dev-moar">
 <!-- Cache-busting build id; stamped with the commit SHA at deploy time. Set
      before the module loads so raku-runtime.js can read it. -->
-<script>window.__BUILD__ = "dev";</script>
-<script type="module" src="playground.js?v=dev"></script>
+<script>window.__BUILD__ = "dev-moar";</script>
+<script type="module" src="playground.js?v=dev-moar"></script>
 </head>
 <body>
 <div id="load-bar" hidden><i></i></div>
@@ -30,6 +30,7 @@
         <select id="runtime" title="Raku runtime (reloads the page)">
             <option value="perl6">Rakudo (perl6.js)</option>
             <option value="rakupp">rakupp (WASM)</option>
+            <option value="moar">Rakudo (WASM MoarVM)</option>
         </select>
         <select id="theme" title="Editor color theme"></select>
         <button id="help" title="Take the tour" aria-label="Take the tour">?</button>

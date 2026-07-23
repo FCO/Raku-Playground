@@ -248,7 +248,53 @@ async function loadRakupp() {
     }
 }
 
+// ---- moar (real Rakudo on WASM MoarVM) -----------------------------------
+// Real Rakudo compiled to MoarVM bytecode, with MoarVM itself compiled to
+// WebAssembly (Emscripten). Unlike perl6 (the Rakudo→JS backend) it has no JS
+// bridge, so program output is plain text. One warm module instance runs many
+// programs: each run writes the source to the in-memory FS and re-invokes the
+// Rakudo runner (callMain), which is re-entrant here.
+let moarModule = null;
+// libpaths + the perl6.moarvm runner, matching the native `raku` launcher; the
+// whole nqp + rakudo runtime is baked into moar.data (preloaded).
+const MOAR_ARGS = [
+    "--libpath=/nqp/lib",
+    "--libpath=/perl6/lib",
+    "--libpath=/perl6/runtime",
+    "/perl6/runtime/perl6.moarvm",
+];
+
+async function loadMoar() {
+    try {
+        importScripts(`moar.js?v=${BUILD}`); // defines self.createMoar
+        self.postMessage({ type: "progress", fraction: 0.5, phase: "download" });
+        moarModule = await self.createMoar({
+            noInitialRun: true,
+            locateFile: (p) => `${p}?v=${BUILD}`, // moar.wasm / moar.data
+            // Single-threaded: keep MoarVM's spesh worker (which would spawn a
+            // thread) off — the libuv shim has no real threads.
+            preRun: [(M) => { M.ENV.MVM_SPESH_DISABLE = "1"; }],
+            print: (t) => {
+                const s = t + "\n";
+                if (!dispatchLine(s)) self.postMessage({ type: "stdout", text: s, plain: true });
+            },
+            printErr: (t) => {
+                // Puzzle levels prepend worldConfig + WORLD_ENGINE, so correct
+                // "line N" the same way rakupp does (no-op when lineOffset is 0).
+                if (running || Date.now() < stderrOpenUntil)
+                    self.postMessage({ type: "stderr", text: correctLines(t) + "\n" });
+                else console.warn(t);
+            },
+        });
+        self.postMessage({ type: "progress", fraction: 1, phase: "compile" });
+        self.postMessage({ type: "ready" });
+    } catch (e) {
+        self.postMessage({ type: "load-error", message: String(e && (e.stack || e.message || e)) });
+    }
+}
+
 async function load() {
+    if (RUNTIME === "moar") return loadMoar();
     if (RUNTIME === "rakupp") return loadRakupp();
     try {
         // Single-file build: world-sim.js and perl6.js are concatenated into
@@ -313,11 +359,31 @@ self.onmessage = (e) => {
             : msg.level.sim === "snake" ? new SnakePresenter(msg.level.goal)
             // Puzzle world: rakupp runs the whole sim in Raku (@@PZ@@ stream →
             // WorldPresenter); perl6 answers the JS bridge from WorldSim.
-            : RUNTIME === "rakupp" ? new WorldPresenter(msg.level)
+            // rakupp and moar have no JS bridge: the sim runs in Raku and
+            // reports via the @@PZ@@ stdout stream, parsed by WorldPresenter.
+            : (RUNTIME === "rakupp" || RUNTIME === "moar") ? new WorldPresenter(msg.level)
             : new self.WorldSim(msg.level))
         : null;
     rakuppLineOffset = msg.lineOffset || 0;
     running = true;
+
+    if (RUNTIME === "moar") {
+        try {
+            if (!moarModule) throw new Error("moar module not loaded");
+            // Write the program to the in-memory FS and run the Rakudo runner.
+            moarModule.FS.writeFile("/playground-src.raku", msg.source);
+            moarModule.callMain([...MOAR_ARGS, "/playground-src.raku"]);
+        } catch (err) {
+            // Emscripten's ExitStatus (a clean exit()) is not an error.
+            if (!(err && err.name === "ExitStatus"))
+                self.postMessage({ type: "stderr", text: err && err.message ? err.message : String(err) });
+        } finally {
+            running = false;
+            stderrOpenUntil = Date.now() + 250;
+            self.postMessage({ type: "done", id: msg.id, result: sim ? sim.result() : null });
+        }
+        return;
+    }
 
     if (RUNTIME === "rakupp") {
         try {

@@ -75,7 +75,7 @@ const STEPS = [
     {
         target: "#runtime",
         title: "Runtime",
-        body: "Choose which Raku runs your code. <b>Rakudo (perl6.js)</b> is the default — the complete, battle-tested engine. <b>rakupp</b> is a compact WebAssembly build that's far smaller to download and can feel faster, but it's still <b>experimental</b>: a few lessons need Rakudo and show a ⚠ when rakupp is selected. Switching reloads the page.",
+        body: "Choose which Raku runs your code. <b>Rakudo (perl6.js)</b> is the default — the complete, battle-tested engine. <b>rakupp</b> is a compact WebAssembly build that's far smaller to download and can feel faster, but it's still <b>experimental</b>: a few lessons need Rakudo and show a ⚠ when rakupp is selected. <b>Rakudo (WASM MoarVM)</b> is the real Rakudo compiler on WebAssembly — full language support like the default, in a lighter download. Switching reloads the page.",
     },
     {
         target: null,
